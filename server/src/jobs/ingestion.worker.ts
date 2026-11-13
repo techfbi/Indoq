@@ -284,6 +284,12 @@ export const startIngestionWorker = () => {
     });
   });
 
+  worker.on("error", (err) => {
+    logger.error("Ingestion worker connection error", {
+      error: err.message,
+    });
+  });
+
   logger.info("Ingestion worker started", { concurrency: CONCURRENCY });
 
   return worker;

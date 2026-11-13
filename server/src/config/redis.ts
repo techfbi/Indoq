@@ -11,6 +11,11 @@ export const getRedis = (): Redis => {
     maxRetriesPerRequest: null,
     lazyConnect: false,
     enableReadyCheck: true,
+    /*
+      Exponential backoff capped at 30 seconds so unreachable Redis hosts
+      do not flood the console or DNS resolver.
+    */
+    retryStrategy: (times: number) => Math.min(times * 2000, 30000),
   });
 
   instance.on("connect", () => console.log("Redis connected"));

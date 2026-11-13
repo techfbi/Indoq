@@ -9,7 +9,6 @@ import Input from "@/components/ui/Input";
 import PasswordInput from "@/components/ui/PasswordInput";
 import Button from "@/components/ui/Button";
 import { brand } from "@/config/brand";
-import { z } from "zod";
 
 const FRIENDLY_ERRORS: Record<string, string> = {
   "Invalid login credentials": "Incorrect email or password",
@@ -22,7 +21,7 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 const getFriendlyError = (message: string): string =>
   FRIENDLY_ERRORS[message] ?? message;
 
-export default function LoginPage() {
+const LoginPage = () => {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -175,4 +174,6 @@ export default function LoginPage() {
       </p>
     </div>
   );
-}
+};
+
+export default LoginPage;

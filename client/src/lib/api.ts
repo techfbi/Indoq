@@ -4,6 +4,7 @@
 */
 
 import type { Document } from "@/types/document";
+import type { Citation, Conversation, Message } from "@/types/conversation";
 
 const getBaseUrl = () =>
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -88,7 +89,7 @@ export const streamQuery = async (
     documentId?: string;
   },
   onToken: (token: string) => void,
-  onDone: (conversationId: string, citations: unknown[]) => void,
+  onDone: (conversationId: string, citations: Citation[]) => void,
   onError: (message: string) => void
 ): Promise<void> => {
   const authHeader = await getAuthHeader();
@@ -147,7 +148,7 @@ export const streamQuery = async (
           type: string;
           token?: string;
           conversationId?: string;
-          citations?: unknown[];
+          citations?: Citation[];
           message?: string;
         };
 
@@ -215,13 +216,15 @@ export const api = {
 
   conversations: {
     list: (workspaceId: string) =>
-      request<{ conversations: unknown[] }>(
+      request<{ conversations: Conversation[] }>(
         `/api/workspaces/${workspaceId}/conversations`
       ),
     get: (conversationId: string) =>
-      request<{ conversation: unknown }>(`/api/conversations/${conversationId}`),
+      request<{ conversation: Conversation }>(
+        `/api/conversations/${conversationId}`
+      ),
     getMessages: (conversationId: string) =>
-      request<{ messages: unknown[] }>(
+      request<{ messages: Message[] }>(
         `/api/conversations/${conversationId}/messages`
       ),
     delete: (conversationId: string) =>

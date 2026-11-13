@@ -28,22 +28,25 @@ export const Meteors = ({
   );
 
   useEffect(() => {
-    const styles = [...new Array(number)].map(() => ({
-      "--angle": -angle + "deg",
-      top: "-5%",
-      left: `calc(0% + ${Math.floor(Math.random() * window.innerWidth)}px)`,
-      animationDelay: Math.random() * (maxDelay - minDelay) + minDelay + "s",
-      animationDuration:
-        Math.floor(Math.random() * (maxDuration - minDuration) + minDuration) +
-        "s",
-    }));
-    setMeteorStyles(styles);
+    const frameId = window.requestAnimationFrame(() => {
+      const styles = [...new Array(number)].map(() => ({
+        "--angle": -angle + "deg",
+        top: "-5%",
+        left: `calc(0% + ${Math.floor(Math.random() * window.innerWidth)}px)`,
+        animationDelay: Math.random() * (maxDelay - minDelay) + minDelay + "s",
+        animationDuration:
+          Math.floor(Math.random() * (maxDuration - minDuration) + minDuration) +
+          "s",
+      }));
+      setMeteorStyles(styles);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, [number, minDelay, maxDelay, minDuration, maxDuration, angle]);
 
   return (
     <>
       {[...meteorStyles].map((style, idx) => (
-        // Meteor Head
         <span
           key={idx}
           style={{ ...style }}
@@ -52,7 +55,6 @@ export const Meteors = ({
             className,
           )}
         >
-          {/* Meteor Tail */}
           <div className="pointer-events-none absolute top-1/2 -z-10 h-px w-12.5 -translate-y-1/2 bg-linear-to-r from-zinc-500 to-transparent" />
         </span>
       ))}
