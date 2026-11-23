@@ -132,7 +132,14 @@ export const MermaidDiagram = ({ code }: MermaidDiagramProps) => {
     const render = async () => {
       try {
         const mermaid = await loadMermaid();
-        const fontFamily = getComputedStyle(document.body).fontFamily;
+        /*
+          The page font comes from next/font under a generated name
+          that does not exist outside the app. Generic fallbacks keep
+          exported files in a sans serif face instead of Times.
+        */
+        const fontFamily = `${
+          getComputedStyle(document.body).fontFamily
+        }, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
 
         mermaid.initialize({
           startOnLoad: false,

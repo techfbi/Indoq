@@ -102,8 +102,39 @@ export const containsDiagram = (content: string): boolean =>
   citation inside a label would break parsing. Citations belong
   in the surrounding prose, never inside the diagram.
 */
-export const cleanMermaidCode = (code: string): string =>
-  code.replace(/[ \t]*\[Doc\s*\d+\]/gi, "").trim();
+export const cleanMermaidCode = (code: string): string => {
+  const withoutCitations = code
+    .replace(/[ \t]*[[【]Doc\s*\d+[\]】]/gi, "")
+    .trim();
+
+  return escapeFlowchartLabels(withoutCitations);
+};
+
+/*
+  With htmlLabels off, mermaid silently drops a bare < or > inside
+  label text, so "Document > 800 pages?" rendered as
+  "Document 800 pages?", which changes the meaning. Mermaid entity
+  codes #lt; and #gt; render the real characters.
+
+  Only applied to flowcharts, where it was observed. Other diagram
+  types use < and | as syntax (classDiagram <|-- arrows, erDiagram
+  ||--o{ relationships), so a blanket replace could break them.
+  Covers quoted labels "..." and edge labels |...|.
+*/
+const escapeLabelText = (text: string): string =>
+  text.replace(/</g, "#lt;").replace(/>/g, "#gt;");
+
+const escapeFlowchartLabels = (code: string): string => {
+  const type = getDiagramType(code);
+  if (type !== "flowchart" && type !== "graph") return code;
+
+  return code
+    .replace(/"([^"\n]*)"/g, (_, inner: string) => `"${escapeLabelText(inner)}"`)
+    .replace(
+      /\|([^|\n]*)\|/g,
+      (_, inner: string) => `|${escapeLabelText(inner)}|`
+    );
+};
 
 /*
   Reads the diagram keyword from the first meaningful line.

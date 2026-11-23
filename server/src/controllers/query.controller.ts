@@ -92,13 +92,18 @@ export const queryController = {
           */
           res.write(`data: ${JSON.stringify({ type: "token", token })}\n\n`);
         },
-        onComplete: async (text: string, citations: Citation[]) => {
+        onComplete: async (
+          text: string,
+          citations: Citation[],
+          model: string
+        ) => {
           fullText = text;
 
+          // model records which model actually answered, primary or fallback
           const queryMetadata = {
             generation_ms: Date.now() - startMs,
             chunks_used: citations.length,
-            model: "llama-3.3-70b-versatile",
+            model,
           };
 
           await conversationRepo.addMessage(

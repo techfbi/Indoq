@@ -12,7 +12,11 @@ export interface RAGStreamOptions {
   documentId?: string;
   conversationHistory: ConversationMessage[];
   onToken: (token: string) => void;
-  onComplete: (fullText: string, citations: Citation[]) => void;
+  onComplete: (
+    fullText: string,
+    citations: Citation[],
+    model: string
+  ) => void | Promise<void>;
 }
 
 /*
@@ -59,7 +63,7 @@ export const ragStream = async (options: RAGStreamOptions): Promise<void> => {
       fullText += token;
       options.onToken(token);
     },
-    onComplete: async () => {
+    onComplete: async (_text, model) => {
       const citations = await mapCitations(
         fullText,
         context.citationMap,
@@ -72,9 +76,10 @@ export const ragStream = async (options: RAGStreamOptions): Promise<void> => {
         workspaceId: options.workspaceId,
         totalMs,
         citationCount: citations.length,
+        model,
       });
 
-      options.onComplete(fullText, citations);
+      await options.onComplete(fullText, citations, model);
     },
   });
 };

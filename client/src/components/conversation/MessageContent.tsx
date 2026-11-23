@@ -29,13 +29,18 @@ const TextWithCitations = ({
     return <p className="whitespace-pre-wrap leading-relaxed">{content}</p>;
   }
 
-  // Split by [Doc N] tokens, keeping the matched delimiters
-  const parts = content.split(/(\[Doc\s*\d+\])/gi);
+  /*
+    Split by [Doc N] tokens, keeping the matched delimiters.
+    Also accepts 【Doc N】 with full width brackets, which gpt oss
+    models emit in short answers. Keep in sync with the server
+    pattern in services/rag/citationMapper.ts.
+  */
+  const parts = content.split(/([[【]Doc\s*\d+[\]】])/gi);
 
   return (
     <div className="whitespace-pre-wrap leading-relaxed">
       {parts.map((part, i) => {
-        const match = part.match(/\[Doc\s*(\d+)\]/i);
+        const match = part.match(/^[[【]Doc\s*(\d+)[\]】]$/i);
         if (match) {
           const docNum = parseInt(match[1], 10);
           const citation = citations[docNum - 1];

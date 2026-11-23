@@ -7,11 +7,16 @@ const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
 /*
   Primary and fallback models.
-  If the primary model is rate limited or unavailable,
+  If the primary model is rate limited, unavailable, or retired,
   the fallback is automatically tried before giving up.
+
+  Groq retired both Llama models (llama 3.3 70b versatile and
+  llama 3.1 8b instant) and returns 404 model_not_found for them.
+  gpt oss 120b and 20b are the closest replacements on Groq and
+  were verified against the real system prompt on 2026-11-23.
 */
-const PRIMARY_MODEL = "llama-3.3-70b-versatile";
-const FALLBACK_MODEL = "llama-3.1-8b-instant";
+const PRIMARY_MODEL = "openai/gpt-oss-120b";
+const FALLBACK_MODEL = "openai/gpt-oss-20b";
 
 export interface StreamOptions {
   systemPrompt: string;
@@ -19,7 +24,8 @@ export interface StreamOptions {
   conversationHistory: ConversationMessage[];
   userQuery: string;
   onToken: (token: string) => void;
-  onComplete: (fullText: string) => void;
+  // model is the one that actually answered, primary or fallback
+  onComplete: (fullText: string, model: string) => void | Promise<void>;
 }
 
 export interface ConversationMessage {
@@ -107,12 +113,22 @@ export const streamGroqResponse = async (
       }
     }
 
-    options.onComplete(fullText);
+    /*
+      Awaited so a failure while saving the message or writing the
+      done event surfaces in the catch below and reaches the client
+      as an SSE error event, instead of an unhandled rejection.
+    */
+    await options.onComplete(fullText, useModel);
   } catch (err: unknown) {
     const isRateLimit = err instanceof Groq.APIError && err.status === 429;
     const isUnavailable = err instanceof Groq.APIError && err.status === 503;
+    // 404 means the model was retired, the fallback may still exist
+    const isModelMissing = err instanceof Groq.APIError && err.status === 404;
 
-    if ((isRateLimit || isUnavailable) && useModel === PRIMARY_MODEL) {
+    if (
+      (isRateLimit || isUnavailable || isModelMissing) &&
+      useModel === PRIMARY_MODEL
+    ) {
       logger.warn("Groq primary model unavailable, falling back", {
         model: PRIMARY_MODEL,
         fallback: FALLBACK_MODEL,

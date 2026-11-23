@@ -19,7 +19,12 @@ export const mapCitations = async (
     A response may cite the same document multiple times
     so we deduplicate by chunk_id.
   */
-  const docIndexPattern = /\[Doc (\d+)\]/g; //It searches for things like: [Doc 1], [Doc 2]
+  /*
+    Matches [Doc 1] and also 【Doc 1】 with full width brackets,
+    which gpt oss models emit in short answers. Keep in sync with
+    the client pattern in components/conversation/MessageContent.tsx.
+  */
+  const docIndexPattern = /[[【]Doc\s*(\d+)[\]】]/g;
   const referencedIndexes = new Set<number>(); //stores unique values.
   let match: RegExpExecArray | null;
 

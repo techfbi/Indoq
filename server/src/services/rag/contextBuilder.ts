@@ -29,7 +29,9 @@ const DIAGRAM_RULES = `DIAGRAMS:
 - Use at most one diagram per answer and always explain it in prose as well.
 - Write the diagram in Mermaid syntax inside a fenced code block that starts with \`\`\`mermaid on its own line and ends with \`\`\` on its own line.
 - Use only these diagram types: flowchart TD, flowchart LR, sequenceDiagram, stateDiagram-v2, classDiagram, erDiagram, mindmap, timeline.
-- Keep it under 20 nodes. Wrap every node label in double quotes, for example A["Upload document"]. Do not use parentheses, brackets, or quotes inside label text.
+- Keep it to 12 nodes or fewer. Merge minor steps into one node rather than drawing every detail.
+- Node IDs are short plain letters with no quotes (A, B, C). Wrap every node label in double quotes, for example A["Upload document"] --> B["Store file"]. Never write "A"["label"].
+- Do not use brackets or double quotes inside label text.
 - Every node and relationship must come from the document context. Never add steps the documents do not mention.
 - Never put [Doc N] citations inside the diagram. Cite the sources in the sentence before or after it.`;
 
