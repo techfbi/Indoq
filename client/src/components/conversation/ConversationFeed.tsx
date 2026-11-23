@@ -3,6 +3,8 @@
 import React, { useEffect, useRef } from "react";
 import type { Message, Citation } from "@/types/conversation";
 import { ChatMessage } from "./ChatMessage";
+import { MessageContent } from "./MessageContent";
+import { containsDiagram } from "@/lib/diagram";
 
 interface ConversationFeedProps {
   messages: Message[];
@@ -103,9 +105,13 @@ export const ConversationFeed = ({
             </span>
           </div>
 
-          <div className="max-w-2xl rounded-lg p-4 text-sm text-text-primary border bg-surface border-border leading-relaxed">
+          <div
+            className={`max-w-2xl rounded-lg p-4 text-sm text-text-primary border bg-surface border-border leading-relaxed ${
+              containsDiagram(streamingMessage) ? "w-full" : ""
+            }`}
+          >
             {streamingMessage ? (
-              <span className="whitespace-pre-wrap">{streamingMessage}</span>
+              <MessageContent content={streamingMessage} isStreaming />
             ) : (
               <span className="text-text-secondary text-xs">
                 Retrieving grounded context from documents...

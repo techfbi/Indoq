@@ -3,55 +3,14 @@
 import React, { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { Message, Citation } from "@/types/conversation";
-import { CitationBadge } from "./CitationBadge";
+import { containsDiagram } from "@/lib/diagram";
+import { MessageContent } from "./MessageContent";
 
 interface ChatMessageProps {
   message: Message;
   onSelectCitation: (citation: Citation) => void;
   index?: number;
 }
-
-/*
-  Parses assistant response text for [Doc N] citation tags
-  and replaces them with interactive CitationBadge components.
-*/
-const renderContentWithCitations = (
-  content: string,
-  citations: Citation[],
-  onSelectCitation: (c: Citation) => void
-) => {
-  if (!citations || citations.length === 0) {
-    return <p className="whitespace-pre-wrap leading-relaxed">{content}</p>;
-  }
-
-  /*
-    Split text by [Doc N] tokens, keeping matched delimiters
-  */
-  const parts = content.split(/(\[Doc\s*\d+\])/gi);
-
-  return (
-    <div className="whitespace-pre-wrap leading-relaxed">
-      {parts.map((part, i) => {
-        const match = part.match(/\[Doc\s*(\d+)\]/i);
-        if (match) {
-          const docNum = parseInt(match[1], 10);
-          const citation = citations[docNum - 1];
-          if (citation) {
-            return (
-              <CitationBadge
-                key={i}
-                citation={citation}
-                index={docNum - 1}
-                onClick={onSelectCitation}
-              />
-            );
-          }
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </div>
-  );
-};
 
 export const ChatMessage = ({
   message,
@@ -60,6 +19,9 @@ export const ChatMessage = ({
 }: ChatMessageProps) => {
   const isUser = message.role === "user";
   const shouldReduceMotion = useReducedMotion();
+
+  // Bubbles shrink to their text, diagrams need the full width to draw into
+  const hasDiagram = !isUser && containsDiagram(message.content);
 
   const formattedTime = useMemo(() => {
     try {
@@ -97,17 +59,17 @@ export const ChatMessage = ({
       <div
         className={`max-w-2xl rounded-lg p-4 text-sm text-text-primary border border-border ${
           isUser ? "bg-surface-raised" : "bg-surface"
-        }`}
+        } ${hasDiagram ? "w-full" : ""}`}
       >
         {isUser ? (
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         ) : (
           <div>
-            {renderContentWithCitations(
-              message.content,
-              message.citations,
-              onSelectCitation
-            )}
+            <MessageContent
+              content={message.content}
+              citations={message.citations ?? []}
+              onSelectCitation={onSelectCitation}
+            />
 
             {/* Citations Footer Strip */}
             {message.citations && message.citations.length > 0 && (
