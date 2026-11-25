@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { RateLimiterRedis, RateLimiterMemory } from "rate-limiter-flexible";
-import { getRedis } from "../config/redis.js";
+import { getLimiterRedis } from "../config/redis.js";
 import { LIMITS } from "../config/limits.js";
 import { RateLimitError } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
@@ -20,6 +20,11 @@ const memoryFallbacks = {
     points: LIMITS.UPLOAD_RATE_LIMIT_PER_HOUR,
     duration: 60 * 60,
   }),
+  retry: new RateLimiterMemory({
+    keyPrefix: "mem:retry",
+    points: LIMITS.RETRY_RATE_LIMIT_PER_HOUR,
+    duration: 60 * 60,
+  }),
   query: new RateLimiterMemory({
     keyPrefix: "mem:query",
     points: LIMITS.QUERY_RATE_LIMIT_PER_HOUR,
@@ -29,7 +34,7 @@ const memoryFallbacks = {
 
 const makeLimiter = (keyPrefix: string, points: number, durationSecs: number) =>
   new RateLimiterRedis({
-    storeClient: getRedis(),
+    storeClient: getLimiterRedis(),
     keyPrefix,
     points,
     duration: durationSecs,
@@ -39,6 +44,7 @@ const makeLimiter = (keyPrefix: string, points: number, durationSecs: number) =>
 const limiters = {
   login: makeLimiter("rl:login", LIMITS.LOGIN_RATE_LIMIT_PER_15MIN, 15 * 60),
   upload: makeLimiter("rl:upload", LIMITS.UPLOAD_RATE_LIMIT_PER_HOUR, 60 * 60),
+  retry: makeLimiter("rl:retry", LIMITS.RETRY_RATE_LIMIT_PER_HOUR, 60 * 60),
   query: makeLimiter("rl:query", LIMITS.QUERY_RATE_LIMIT_PER_HOUR, 60 * 60),
 };
 

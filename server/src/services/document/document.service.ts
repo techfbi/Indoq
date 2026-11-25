@@ -1,14 +1,56 @@
 import { documentRepo } from "../../repositories/document.repo.js";
 import { workspaceRepo } from "../../repositories/workspace.repo.js";
 import { supabaseAdmin } from "../../config/supabase.js";
-import { getIngestionQueue } from "../../config/queue.js";
 import { LIMITS } from "../../config/limits.js";
 import { ValidationError } from "../../utils/errors.js";
-import { createFileUrl, removeFiles } from "./documentStorage.js";
+import {
+  createFileUrl,
+  removeFiles,
+  tryRemoveFiles,
+} from "./documentStorage.js";
+import {
+  cancelIngestion,
+  enqueueIngestion,
+  hasLiveJob,
+} from "../ingestion/ingestionJobs.js";
 import { logger } from "../../utils/logger.js";
-import type { IngestionJobData } from "../../config/queue.js";
+import type { Database } from "../../types/database.js";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
+
+type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
+
+// Postgres unique violation
+const UNIQUE_VIOLATION = "23505";
+
+/*
+  Starts processing. If the queue cannot be reached the document is
+  marked FAILED instead of waiting forever, so the user can retry.
+*/
+const startIngestion = async (
+  document: DocumentRow,
+  userId: string
+): Promise<DocumentRow> => {
+  try {
+    await enqueueIngestion({
+      documentId: document.id,
+      workspaceId: document.workspace_id,
+      userId,
+      storagePath: document.storage_path,
+      mimeType: document.mime_type,
+    });
+    return document;
+  } catch (err) {
+    logger.error("Could not queue document", {
+      documentId: document.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+
+    const message = "Processing could not start. Retry to continue.";
+    await documentRepo.updateStatus(document.id, "FAILED", message);
+    return { ...document, status: "FAILED", processing_error: message };
+  }
+};
 
 export const documentService = {
   getAll: (workspaceId: string, userId: string, accessToken: string) =>
@@ -47,13 +89,31 @@ export const documentService = {
     workspaceId: string,
     userId: string,
     file: Express.Multer.File,
-    title?: string
-  ) => {
+    title?: string,
+    requestedId?: string
+  ): Promise<DocumentRow> => {
     /*
       Verify the workspace exists and belongs to this user
       before doing anything with the file.
     */
     await workspaceRepo.verifyOwnership(workspaceId, userId);
+
+    /*
+      The client picks the document id, so sending an upload again
+      after a lost response finds the first one instead of storing,
+      processing and paying for a second copy.
+    */
+    const documentId = requestedId ?? uuidv4();
+    const earlier = await documentRepo.findAny(documentId);
+
+    if (earlier) {
+      if (earlier.workspace_id !== workspaceId) {
+        throw new ValidationError("Please choose the file again and retry");
+      }
+      return earlier.status === "QUEUED"
+        ? startIngestion(earlier, userId)
+        : earlier;
+    }
 
     /*
       Check the file count and total size limits. Counts every
@@ -77,7 +137,6 @@ export const documentService = {
       );
     }
 
-    const documentId = uuidv4();
     const extension = path.extname(file.originalname).toLowerCase();
     const sanitizedFilename = documentId + extension;
 
@@ -98,7 +157,8 @@ export const documentService = {
       .from("documents")
       .upload(storagePath, file.buffer, {
         contentType: file.mimetype,
-        upsert: false,
+        // A file here with no record is left from an interrupted attempt
+        upsert: true,
       });
 
     if (uploadError) {
@@ -126,33 +186,53 @@ export const documentService = {
         status: "QUEUED",
       })
       .catch(async (err: unknown) => {
+        // The same upload arrived twice at once and the other one won
+        if ((err as { code?: string }).code === UNIQUE_VIOLATION) {
+          const winner = await documentRepo.findAny(documentId);
+          if (winner?.workspace_id === workspaceId) return winner;
+        }
+
         // Without a record nothing points at the file, so remove it
-        await removeFiles([storagePath]);
+        await tryRemoveFiles([storagePath]);
         throw err;
       });
 
-    /*
-      Dispatch the ingestion job to BullMQ.
-      The job ID matches the document ID for easy correlation in logs.
-    */
-    const jobData: IngestionJobData = {
-      documentId,
-      workspaceId,
-      userId,
-      storagePath,
-      mimeType: file.mimetype,
-    };
-
-    await getIngestionQueue().add(documentId, jobData, { jobId: documentId });
-
-    logger.info("Document uploaded and queued", {
+    logger.info("Document uploaded", {
       documentId,
       workspaceId,
       filename: file.originalname,
       size: file.size,
     });
 
-    return document;
+    return startIngestion(document, userId);
+  },
+
+  /*
+    Continues a document that stopped. The worker picks up from the
+    chunks and embeddings already saved. Safe to call repeatedly, a
+    document that is finished or already running is returned as is.
+  */
+  retry: async (
+    documentId: string,
+    workspaceId: string,
+    userId: string,
+    accessToken: string
+  ): Promise<DocumentRow> => {
+    const document = await documentRepo.findById(
+      documentId,
+      workspaceId,
+      accessToken
+    );
+
+    if (document.status === "READY") return document;
+    if (await hasLiveJob(documentId)) return document;
+
+    const claimed = await documentRepo.claimForRetry(document);
+    if (!claimed) {
+      return documentRepo.findById(documentId, workspaceId, accessToken);
+    }
+
+    return startIngestion(claimed, userId);
   },
 
   delete: async (
@@ -160,18 +240,19 @@ export const documentService = {
     workspaceId: string,
     userId: string
   ): Promise<void> => {
-    /*
-      Repository verifies ownership and returns the storage path.
-      Cascade delete on the DB removes all chunks automatically.
-    */
-    const storagePath = await documentRepo.delete(documentId, workspaceId, userId);
+    const storagePath = await documentRepo.findStoragePath(
+      documentId,
+      workspaceId,
+      userId
+    );
 
     /*
-      Remove the file from Supabase Storage after the DB record
-      is deleted. If storage deletion fails we log it but do not
-      throw, the document is already gone from the DB and the
-      orphaned file causes no functional harm.
+      Job, then file, then record. The record is the only pointer to
+      the other two, so it goes last and a failed delete can be
+      repeated. Chunks and embeddings cascade with the record.
     */
+    await cancelIngestion(documentId);
     await removeFiles([storagePath]);
+    await documentRepo.delete(documentId);
   },
 };

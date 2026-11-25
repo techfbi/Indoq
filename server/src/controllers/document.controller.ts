@@ -69,9 +69,29 @@ export const documentController = {
         workspaceId,
         req.user!.id,
         req.file,
-        req.body?.title as string | undefined
+        req.body?.title as string | undefined,
+        req.body?.documentId as string | undefined
       );
 
+      res.status(202).json({ document });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  retry: async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { workspaceId, documentId } = req.params as {
+        workspaceId: string;
+        documentId: string;
+      };
+
+      const document = await documentService.retry(
+        documentId,
+        workspaceId,
+        req.user!.id,
+        req.accessToken!
+      );
       res.status(202).json({ document });
     } catch (err) {
       next(err);

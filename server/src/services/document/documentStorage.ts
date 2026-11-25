@@ -7,19 +7,26 @@ const BUCKET = "documents";
 const SIGNED_URL_SECONDS = 60;
 
 /*
-  Removes files from Storage. Failures are logged, not thrown, because
-  callers have already removed the database record and an orphaned
-  file does no functional harm.
+  Removes files from Storage. Throws on failure, and callers remove
+  files before database records, so a failed delete can simply be
+  repeated and never leaves a file that nothing points to.
+  Paths that are already gone are not an error.
 */
 export const removeFiles = async (paths: string[]): Promise<void> => {
   if (paths.length === 0) return;
 
   const { error } = await supabaseAdmin.storage.from(BUCKET).remove(paths);
+  if (error) throw error;
+};
 
-  if (error) {
+// For tidying up after another error, which must stay the one reported
+export const tryRemoveFiles = async (paths: string[]): Promise<void> => {
+  try {
+    await removeFiles(paths);
+  } catch (err) {
     logger.warn("Storage file removal failed", {
       paths,
-      error: error.message,
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 };

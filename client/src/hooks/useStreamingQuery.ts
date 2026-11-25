@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { streamQuery } from "@/lib/api";
+import { createTextReveal, type TextReveal } from "@/lib/textReveal";
 import {
   getConversationsQueryKey,
   getConversationMessagesQueryKey,
@@ -33,6 +34,20 @@ export const useStreamingQuery = () => {
     Keep ref to accumulated message text so callbacks always read the latest tokens
   */
   const accumulatedRef = useRef("");
+  const revealRef = useRef<TextReveal | null>(null);
+  const mountedRef = useRef(true);
+
+  /*
+    Leaving the page mid answer still saves it to the cache, but skips
+    the pacing since nobody is watching.
+  */
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      revealRef.current?.flush();
+    };
+  }, []);
 
   const resetStreamingState = useCallback(() => {
     setIsStreaming(false);
@@ -87,6 +102,9 @@ export const useStreamingQuery = () => {
         setPendingUserQuestion(trimmedQuestion);
       }
 
+      const reveal = createTextReveal(setStreamingMessage);
+      revealRef.current = reveal;
+
       try {
         await streamQuery(
           workspaceId,
@@ -97,9 +115,10 @@ export const useStreamingQuery = () => {
           },
           (token: string) => {
             accumulatedRef.current += token;
-            setStreamingMessage((prev) => prev + token);
+            reveal.push(token);
           },
-          (finalConversationId: string, citations: Citation[]) => {
+          // The answer is only finalized once all of it has been shown
+          (finalConversationId: string, citations: Citation[]) => reveal.finish(() => {
             setIsStreaming(false);
             setPendingUserQuestion(null);
             setStreamingCitations(citations);
@@ -147,18 +166,24 @@ export const useStreamingQuery = () => {
               /*
                 If this query created a new conversation, notify caller to update URL
               */
-              if (!resolvedConversationId && onConversationCreated) {
+              if (
+                !resolvedConversationId &&
+                onConversationCreated &&
+                mountedRef.current
+              ) {
                 onConversationCreated(finalId);
               }
             }
-          },
+          }),
           (errorMessage: string) => {
+            reveal.flush();
             setIsStreaming(false);
             setPendingUserQuestion(null);
             setStreamingError(errorMessage);
           }
         );
       } catch (err) {
+        reveal.flush();
         setIsStreaming(false);
         setPendingUserQuestion(null);
         const msg = err instanceof Error ? err.message : "Query failed";

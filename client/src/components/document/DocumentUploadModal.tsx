@@ -22,6 +22,9 @@ export const DocumentUploadModal = ({
   const shouldReduceMotion = useReducedMotion();
 
   const [file, setFile] = useState<File | null>(null);
+  // Names this upload, kept across retries and replaced with the file
+  const [documentId, setDocumentId] = useState("");
+  const [uploadFailed, setUploadFailed] = useState(false);
   const [title, setTitle] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export const DocumentUploadModal = ({
     setFile(null);
     setTitle("");
     setErrorMessage(null);
+    setUploadFailed(false);
     setDragActive(false);
     setOpen(false);
   }, [isPending, setOpen]);
@@ -68,6 +72,8 @@ export const DocumentUploadModal = ({
     }
 
     setErrorMessage(null);
+    setUploadFailed(false);
+    setDocumentId(crypto.randomUUID());
     return true;
   };
 
@@ -110,18 +116,22 @@ export const DocumentUploadModal = ({
       return;
     }
 
+    setErrorMessage(null);
+    setUploadFailed(false);
     uploadDoc(
-      { file, title },
+      { file, title, documentId },
       {
         onSuccess: () => {
           setFile(null);
           setTitle("");
+          setDocumentId("");
           setErrorMessage(null);
           setDragActive(false);
           setOpen(false);
         },
         onError: (err: Error) => {
           setErrorMessage(err.message || "Failed to upload document");
+          setUploadFailed(true);
         },
       }
     );
@@ -265,7 +275,37 @@ export const DocumentUploadModal = ({
                 )}
 
                 {errorMessage && (
-                  <p className="text-xs text-danger">{errorMessage}</p>
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 text-xs text-danger"
+                  >
+                    <p>{errorMessage}</p>
+                    {uploadFailed && (
+                      <button
+                        type="submit"
+                        disabled={isPending}
+                        title="Retry upload"
+                        aria-label="Retry upload"
+                        className="group/retry shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-accent hover:bg-accent-muted active:scale-90 transition-all"
+                      >
+                        <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={"transition-transform duration-300 group-hover/retry:rotate-90"}
+                >
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
@@ -280,9 +320,13 @@ export const DocumentUploadModal = ({
                   <Button
                     type="submit"
                     disabled={!file || isPending}
-                    className="w-auto px-5"
+                    className="w-auto px-5 whitespace-nowrap"
                   >
-                    {isPending ? "Uploading..." : "Upload document"}
+                    {isPending
+                      ? "Uploading..."
+                      : uploadFailed
+                        ? "Try again"
+                        : "Upload document"}
                   </Button>
                 </div>
               </form>

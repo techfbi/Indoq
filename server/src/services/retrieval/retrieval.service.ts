@@ -4,6 +4,7 @@ import { vectorSearch } from "./vectorSearch.js";
 import { fullTextSearch } from "./fullTextSearch.js";
 import { reciprocalRankFusion } from "./hybridFusion.js";
 import { LIMITS } from "../../config/limits.js";
+import { documentRepo } from "../../repositories/document.repo.js";
 import { logger } from "../../utils/logger.js";
 import type { FusedChunk } from "./hybridFusion.js";
 
@@ -43,7 +44,7 @@ export const retrieve = async (
 ): Promise<{ chunks: FusedChunk[]; insufficient: boolean }> => {
   const startMs = Date.now();
 
-  const [queryEmbedding] = await Promise.all([embedQuery(query)]);
+  const queryEmbedding = await embedQuery(query);
 
   /*
     Run both retrieval methods in parallel.
@@ -51,13 +52,25 @@ export const retrieve = async (
     we fall back to vector results only rather than failing
     the entire retrieval.
   */
-  const [vectorResults, ftsResults] = await Promise.allSettled([ //Promise.allSettled() instead of Promise.all() bcos Promise.all() fails everything if one promise fails
-    vectorSearch(queryEmbedding, workspaceId, documentId),
-    fullTextSearch(query, workspaceId, documentId),
+  const [[vectorResults, ftsResults], readyIds] = await Promise.all([
+    Promise.allSettled([
+      vectorSearch(queryEmbedding, workspaceId, documentId),
+      fullTextSearch(query, workspaceId, documentId),
+    ]),
+    documentRepo.findReadyIds(workspaceId),
   ]);
 
-  const vector = vectorResults.status === "fulfilled" ? vectorResults.value : [];
-  const fts = ftsResults.status === "fulfilled" ? ftsResults.value : [];
+  /*
+    Chunks are saved before a document is finished, so leave out any
+    that belong to a document still processing or stopped part way.
+  */
+  const onlyReady = <T extends { document_id: string }>(chunks: T[]): T[] =>
+    chunks.filter((c) => readyIds.has(c.document_id));
+
+  const vector =
+    vectorResults.status === "fulfilled" ? onlyReady(vectorResults.value) : [];
+  const fts =
+    ftsResults.status === "fulfilled" ? onlyReady(ftsResults.value) : [];
 
   if (vectorResults.status === "rejected") {
     logger.error("Vector search failed", {

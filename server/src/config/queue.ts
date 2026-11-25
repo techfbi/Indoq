@@ -28,8 +28,8 @@ export const getIngestionQueue = (): Queue<IngestionJobData> => {
         type: "exponential",
         delay: 5000,
       },
-      removeOnComplete: { count: 100 }, // keeps only the last 100 completed jobs in Redis so memory doesn't grow unbounded on the free tier
-      removeOnFail: { count: 200 },
+      removeOnComplete: true, // nothing needs a finished job, so leave nothing behind in Redis
+      removeOnFail: { age: 7 * 24 * 60 * 60, count: 200 }, // kept a week for debugging, retry removes it sooner
     },
   });
 

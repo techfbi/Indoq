@@ -72,7 +72,13 @@ export const queryController = {
         rather than a single JSON response.
       */
       res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
+      /*
+        no-transform stops the compression middleware from holding
+        tokens back until the answer is complete. X-Accel-Buffering
+        asks proxies in front of the server to do the same.
+      */
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
       res.setHeader("Connection", "keep-alive");
       res.setHeader("X-Conversation-Id", activeConversationId);
       res.flushHeaders();

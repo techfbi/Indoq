@@ -66,6 +66,8 @@ const upload = async <T>(path: string, formData: FormData): Promise<T> => {
     method: "POST",
     headers: authHeader,
     body: formData,
+  }).catch(() => {
+    throw new Error("Could not reach the server. Check your connection.");
   });
 
   if (!res.ok) {
@@ -129,6 +131,7 @@ export const streamQuery = async (
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let ended = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -158,8 +161,10 @@ export const streamQuery = async (
         if (event.type === "token" && event.token) {
           onToken(event.token);
         } else if (event.type === "done") {
+          ended = true;
           onDone(event.conversationId ?? "", event.citations ?? []);
         } else if (event.type === "error") {
+          ended = true;
           onError(event.message ?? "Stream error");
         }
       } catch {
@@ -170,6 +175,9 @@ export const streamQuery = async (
       }
     }
   }
+
+  // Without this a dropped connection would look like endless writing
+  if (!ended) onError("The connection closed before the answer finished");
 };
 
 /*
@@ -213,6 +221,11 @@ export const api = {
       upload<{ document: Document }>(
         `/api/workspaces/${workspaceId}/documents`,
         formData
+      ),
+    retry: (workspaceId: string, documentId: string) =>
+      request<{ document: Document }>(
+        `/api/workspaces/${workspaceId}/documents/${documentId}/retry`,
+        { method: "POST" }
       ),
     delete: (workspaceId: string, documentId: string) =>
       request<void>(

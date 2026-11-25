@@ -62,33 +62,100 @@ export const documentRepo = {
   */
   findFilesByWorkspace: async (
     workspaceId: string
-  ): Promise<Pick<DocumentRow, "storage_path" | "file_size">[]> => {
+  ): Promise<Pick<DocumentRow, "id" | "storage_path" | "file_size">[]> => {
     const { data, error } = await supabaseAdmin
       .from("documents")
-      .select("storage_path, file_size")
+      .select("id, storage_path, file_size")
       .eq("workspace_id", workspaceId);
 
     if (error) throw error;
     return data ?? [];
   },
 
+  /*
+    Looks a document up without RLS, for a repeated upload request.
+    Callers must verify workspace ownership first.
+  */
+  findAny: async (documentId: string): Promise<DocumentRow | null> => {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select("*")
+      .eq("id", documentId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Null means the document no longer exists
+  findStatus: async (documentId: string): Promise<DocumentStatus | null> => {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select("status")
+      .eq("id", documentId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.status ?? null;
+  },
+
+  // Documents that finished processing and may be searched
+  findReadyIds: async (workspaceId: string): Promise<Set<string>> => {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "READY");
+
+    if (error) throw error;
+    return new Set(data.map((d) => d.id));
+  },
+
+  /*
+    Moves a stopped document back to QUEUED, but only if nothing changed
+    since it was read. When two retries arrive together exactly one
+    gets the row back, the other gets null.
+  */
+  claimForRetry: async (document: DocumentRow): Promise<DocumentRow | null> => {
+    const update: DocumentUpdate = {
+      status: "QUEUED",
+      processing_error: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .update(update)
+      .eq("id", document.id)
+      .eq("status", document.status)
+      .eq("updated_at", document.updated_at)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Returns false when the document no longer exists
   updateStatus: async (
     documentId: string,
     status: DocumentStatus,
     processingError?: string
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const update: DocumentUpdate = {
       status,
       processing_error: processingError ?? null,
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("documents")
       .update(update)
-      .eq("id", documentId);
+      .eq("id", documentId)
+      .select("id");
 
     if (error) throw error;
+    return data.length > 0;
   },
 
   updatePageCount: async (
@@ -106,7 +173,8 @@ export const documentRepo = {
     if (error) throw error;
   },
 
-  delete: async (
+  // Verifies ownership and returns where the file is stored
+  findStoragePath: async (
   documentId: string,
   workspaceId: string,
   userId: string
@@ -130,13 +198,16 @@ export const documentRepo = {
 
   if (findError || !existing) throw new NotFoundError("Document");
 
-  const { error } = await supabaseAdmin
-    .from("documents")
-    .delete()
-    .eq("id", documentId);
-
-  if (error) throw error;
-
   return existing.storage_path;
 },
+
+  // Chunks go with the row through the foreign key cascade
+  delete: async (documentId: string): Promise<void> => {
+    const { error } = await supabaseAdmin
+      .from("documents")
+      .delete()
+      .eq("id", documentId);
+
+    if (error) throw error;
+  },
 };

@@ -6,7 +6,8 @@ import type { Document } from "@/types/document";
 import { EASE_OUT, SPRING, riseItem } from "@/lib/motion";
 import { DocumentProgress } from "./DocumentProgress";
 import { DocumentStatusBadge } from "./DocumentStatusBadge";
-import { useDeleteDocument } from "@/hooks/useDocuments";
+import { useDeleteDocument, useRetryDocument } from "@/hooks/useDocuments";
+import { useStalled } from "@/hooks/useStalled";
 import { api } from "@/lib/api";
 
 interface DocumentItemProps {
@@ -38,6 +39,17 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const deleteMutation = useDeleteDocument(document.workspace_id);
+  const retryMutation = useRetryDocument(document.workspace_id);
+  const isStalled = useStalled(document);
+
+  /*
+    Errors that start with "This document" are about the file itself,
+    such as too many pages, so trying again cannot help. Keep in sync
+    with PermanentIngestionError on the server.
+  */
+  const isPermanent =
+    document.processing_error?.startsWith("This document") ?? false;
+  const canRetry = (document.status === "FAILED" && !isPermanent) || isStalled;
 
   const handleDelete = async () => {
     if (!confirmDelete) {
@@ -50,6 +62,14 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
         setConfirmDelete(false);
         setActionError(`Could not delete this document. ${error.message}`);
       },
+    });
+  };
+
+  const handleRetry = () => {
+    setActionError(null);
+    retryMutation.mutate(document.id, {
+      onError: (error) =>
+        setActionError(`Could not retry this document. ${error.message}`),
     });
   };
 
@@ -135,6 +155,13 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
             </p>
           )}
 
+          {isStalled && (
+            <p className="mt-1 text-xs text-text-secondary">
+              This is taking longer than usual. Retry to continue from where it
+              stopped.
+            </p>
+          )}
+
           {actionError && (
             <p role="alert" className="mt-1 text-xs text-danger">
               {actionError}
@@ -162,6 +189,35 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
           </div>
         ) : (
           <>
+            {canRetry && (
+              <button
+                onClick={handleRetry}
+                disabled={retryMutation.isPending}
+                title="Retry from where it stopped"
+                aria-label="Retry from where it stopped"
+                className="group/retry w-7 h-7 flex items-center justify-center rounded-md text-accent hover:bg-accent-muted active:scale-90 transition-all disabled:opacity-60"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={
+                    retryMutation.isPending
+                      ? "animate-spin"
+                      : "transition-transform duration-300 group-hover/retry:rotate-90"
+                  }
+                >
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={handleOpen}
               title="Open original file"
