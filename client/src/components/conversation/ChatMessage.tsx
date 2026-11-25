@@ -78,15 +78,15 @@ export const ChatMessage = ({
                   Sources Referenced ({message.citations.length})
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {message.citations.map((c, idx) => (
+                  {message.citations.map((c) => (
                     <button
-                      key={idx}
+                      key={c.index}
                       type="button"
                       onClick={() => onSelectCitation(c)}
                       className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs border border-border bg-surface-raised hover:text-accent transition-colors text-left"
                     >
                       <span className="font-mono text-[10px] text-accent">
-                        [Doc {idx + 1}]
+                        [Doc {c.index}]
                       </span>
                       <span className="font-medium truncate max-w-40">
                         {c.document_title}

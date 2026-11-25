@@ -43,13 +43,13 @@ const TextWithCitations = ({
         const match = part.match(/^[[【]Doc\s*(\d+)[\]】]$/i);
         if (match) {
           const docNum = parseInt(match[1], 10);
-          const citation = citations[docNum - 1];
+          // Match by number, the list only holds sources the answer cited
+          const citation = citations.find((c) => c.index === docNum);
           if (citation) {
             return (
               <CitationBadge
                 key={i}
                 citation={citation}
-                index={docNum - 1}
                 onClick={onSelectCitation}
               />
             );

@@ -1,4 +1,6 @@
 export interface Citation {
+  // The N in [Doc N]. Only cited sources are kept, so this is not the array position
+  index: number;
   document_id: string;
   document_title: string;
   page_number: number | null;

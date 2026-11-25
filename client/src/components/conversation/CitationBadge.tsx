@@ -3,7 +3,6 @@ import type { Citation } from "@/types/conversation";
 
 interface CitationBadgeProps {
   citation: Citation;
-  index?: number;
   onClick: (citation: Citation) => void;
 }
 
@@ -13,11 +12,9 @@ interface CitationBadgeProps {
 */
 export const CitationBadge = ({
   citation,
-  index,
   onClick,
 }: CitationBadgeProps) => {
-  const label =
-    index !== undefined ? `[Doc ${index + 1}]` : `[${citation.document_title}]`;
+  const label = `[Doc ${citation.index}]`;
 
   return (
     <button

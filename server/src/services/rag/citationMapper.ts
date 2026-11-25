@@ -24,7 +24,7 @@ export const mapCitations = async (
     which gpt oss models emit in short answers. Keep in sync with
     the client pattern in components/conversation/MessageContent.tsx.
   */
-  const docIndexPattern = /[[【]Doc\s*(\d+)[\]】]/g;
+  const docIndexPattern = /[[【]Doc\s*(\d+)[\]】]/gi;
   const referencedIndexes = new Set<number>(); //stores unique values.
   let match: RegExpExecArray | null;
 
@@ -64,6 +64,7 @@ export const mapCitations = async (
   );
 
   const citations: Citation[] = referenced.map((ref) => ({
+    index: ref.index,
     document_id: ref.document_id,
     document_title: titleMap.get(ref.document_id) ?? "Unknown document",
     page_number: ref.page_number,
