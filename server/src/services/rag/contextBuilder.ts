@@ -119,7 +119,8 @@ const buildContextSection = (
       index: docIndex,
       document_id: chunk.document_id,
       chunk_id: chunk.id,
-      chunk_excerpt: chunk.content.slice(0, 200),
+      // The whole chunk, so the inspector shows what the answer was built from
+      chunk_excerpt: chunk.content,
       page_number: chunk.page_number,
       section_title: chunk.section_title,
     });

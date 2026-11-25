@@ -94,11 +94,22 @@ export const chunkDocument = (text: string): Chunk[] => {
     chunkIndex++;
   };
 
-  const flushBuffer = () => {
+  /*
+    carryOverlap is false at a section boundary. Carrying the end of the
+    previous section into the next chunk would label that text with the
+    new heading, so a source would open on the wrong content.
+  */
+  const flushBuffer = (carryOverlap = true) => {
     if (currentBuffer.length === 0) return;
 
     const content = currentBuffer.join(" ");
     saveChunk(content, currentSection);
+
+    if (!carryOverlap) {
+      currentBuffer = [];
+      currentTokens = 0;
+      return;
+    }
 
     /*
       Carry over the last CHUNK_OVERLAP_TOKENS worth of sentences
@@ -130,7 +141,7 @@ export const chunkDocument = (text: string): Chunk[] => {
         New section detected. Flush whatever is in the buffer
         under the previous section heading before switching.
       */
-      flushBuffer();
+      flushBuffer(false);
       currentSection = cleanHeading(trimmedLine);
       continue;
     }
