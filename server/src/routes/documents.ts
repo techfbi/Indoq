@@ -39,6 +39,12 @@ router.get(
   documentController.getById
 );
 
+router.get(
+  "/:documentId/file",
+  validate({ params: documentParamsSchema }),
+  documentController.getFileUrl
+);
+
 router.delete(
   "/:documentId",
   validate({ params: documentParamsSchema }),

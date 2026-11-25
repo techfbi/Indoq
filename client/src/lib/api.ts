@@ -49,6 +49,9 @@ const request = async <T>(
     throw new Error(message);
   }
 
+  // Deletes answer 204 with no body, and parsing an empty body throws
+  if (res.status === 204) return undefined as T;
+
   return res.json() as Promise<T>;
 };
 
@@ -201,6 +204,10 @@ export const api = {
     get: (workspaceId: string, documentId: string) =>
       request<{ document: Document }>(
         `/api/workspaces/${workspaceId}/documents/${documentId}`
+      ),
+    getFileUrl: (workspaceId: string, documentId: string) =>
+      request<{ url: string }>(
+        `/api/workspaces/${workspaceId}/documents/${documentId}/file`
       ),
     upload: (workspaceId: string, formData: FormData) =>
       upload<{ document: Document }>(

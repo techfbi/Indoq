@@ -55,6 +55,23 @@ export const documentRepo = {
     return data;
   },
 
+  /*
+    Storage paths and sizes for every document in a workspace.
+    Uses supabaseAdmin so quota checks and file cleanup see all rows.
+    Callers must verify workspace ownership first.
+  */
+  findFilesByWorkspace: async (
+    workspaceId: string
+  ): Promise<Pick<DocumentRow, "storage_path" | "file_size">[]> => {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select("storage_path, file_size")
+      .eq("workspace_id", workspaceId);
+
+    if (error) throw error;
+    return data ?? [];
+  },
+
   updateStatus: async (
     documentId: string,
     status: DocumentStatus,

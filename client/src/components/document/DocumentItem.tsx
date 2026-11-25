@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import type { Document } from "@/types/document";
 import { DocumentStatusBadge } from "./DocumentStatusBadge";
 import { useDeleteDocument } from "@/hooks/useDocuments";
+import { api } from "@/lib/api";
 
 interface DocumentItemProps {
   document: Document;
@@ -32,6 +33,7 @@ const formatDate = (isoString: string): string => {
 
 export const DocumentItem = ({ document }: DocumentItemProps) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const deleteMutation = useDeleteDocument(document.workspace_id);
 
   const handleDelete = async () => {
@@ -39,7 +41,38 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
       setConfirmDelete(true);
       return;
     }
-    await deleteMutation.mutateAsync(document.id);
+    setActionError(null);
+    deleteMutation.mutate(document.id, {
+      onError: (error) => {
+        setConfirmDelete(false);
+        setActionError(`Could not delete this document. ${error.message}`);
+      },
+    });
+  };
+
+  /*
+    Opens the original file in a new tab. The tab is opened before the
+    request because browsers block popups that open after a wait.
+  */
+  const handleOpen = async () => {
+    setActionError(null);
+    const tab = window.open("", "_blank");
+    try {
+      const { url } = await api.documents.getFileUrl(
+        document.workspace_id,
+        document.id
+      );
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = url;
+      } else {
+        window.location.href = url;
+      }
+    } catch (error) {
+      tab?.close();
+      const message = error instanceof Error ? error.message : "";
+      setActionError(`Could not open this document. ${message}`);
+    }
   };
 
   return (
@@ -90,6 +123,12 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
               {document.processing_error}
             </p>
           )}
+
+          {actionError && (
+            <p role="alert" className="mt-1 text-xs text-danger">
+              {actionError}
+            </p>
+          )}
         </div>
       </div>
 
@@ -111,6 +150,29 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
             </button>
           </div>
         ) : (
+          <>
+            <button
+              onClick={handleOpen}
+              title="Open original file"
+              aria-label="Open original file"
+              className="w-7 h-7 flex items-center justify-center rounded-md text-text-disabled hover:text-text-primary hover:bg-surface-raised transition-colors"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 3h6v6" />
+                <path d="M10 14L21 3" />
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              </svg>
+            </button>
           <button
             onClick={handleDelete}
             title="Delete document"
@@ -135,6 +197,7 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
               <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
           </button>
+          </>
         )}
       </div>
     </div>

@@ -26,8 +26,9 @@ export const LIMITS = {
   RETRIEVAL_TOP_K: 20, //how many matching chunks w want back.
   CONTEXT_TOP_K: 10,
   // Cosine similarity of the best vector match, 0 to 1. Not an RRF score, which never exceeds about 0.033.
-  // Starting value, calibrate against real embeddings. Kept low because the system prompt already refuses to answer beyond the context.
-  MIN_RELEVANCE_SCORE: 0.2,
+  // Measured 2026-11-25: on topic questions scored 0.14 to 0.47, unrelated ones stayed under 0.09.
+  // Vague but valid questions such as summarize this document sit near 0.15, so the cutoff is 0.12.
+  MIN_RELEVANCE_SCORE: 0.12,
 
   MAX_CONTEXT_TOKENS: 8000, //These prevent from dumping unlimited material into the LLM.
   MAX_RESPONSE_TOKENS: 2000,

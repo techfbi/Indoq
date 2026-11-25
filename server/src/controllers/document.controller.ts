@@ -36,6 +36,24 @@ export const documentController = {
     }
   },
 
+  getFileUrl: async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { workspaceId, documentId } = req.params as {
+        workspaceId: string;
+        documentId: string;
+      };
+
+      const url = await documentService.getFileUrl(
+        documentId,
+        workspaceId,
+        req.accessToken!
+      );
+      res.json({ url });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   upload: async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { workspaceId } = req.params as { workspaceId: string };

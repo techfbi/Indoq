@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../config/supabase.js";
 import { getIngestionQueue } from "../../config/queue.js";
 import { LIMITS } from "../../config/limits.js";
 import { ValidationError } from "../../utils/errors.js";
+import { createFileUrl, removeFiles } from "./documentStorage.js";
 import { logger } from "../../utils/logger.js";
 import type { IngestionJobData } from "../../config/queue.js";
 import { v4 as uuidv4 } from "uuid";
@@ -15,6 +16,32 @@ export const documentService = {
 
   getById: (documentId: string, workspaceId: string, userId: string, accessToken: string) =>
     documentRepo.findById(documentId, workspaceId, accessToken),
+
+  /*
+    Link to the original file. The lookup runs as the user, so RLS
+    decides whether they may see it. PDF and TXT open in the browser,
+    other formats download under their original name.
+  */
+  getFileUrl: async (
+    documentId: string,
+    workspaceId: string,
+    accessToken: string
+  ): Promise<string> => {
+    const document = await documentRepo.findById(
+      documentId,
+      workspaceId,
+      accessToken
+    );
+
+    const opensInBrowser = ["application/pdf", "text/plain"].includes(
+      document.mime_type
+    );
+
+    return createFileUrl(
+      document.storage_path,
+      opensInBrowser ? undefined : document.original_filename
+    );
+  },
 
   upload: async (
     workspaceId: string,
@@ -29,20 +56,24 @@ export const documentService = {
     await workspaceRepo.verifyOwnership(workspaceId, userId);
 
     /*
-      Check the workspace has not exceeded the maximum file count.
-      Uses supabaseAdmin because we need the true count regardless
-      of status, including failed documents.
+      Check the file count and total size limits. Counts every
+      document regardless of status, including failed ones, since
+      their files still take up storage.
     */
-    const { count, error: countError } = await supabaseAdmin
-      .from("documents")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId);
+    const existing = await documentRepo.findFilesByWorkspace(workspaceId);
 
-    if (countError) throw countError;
-
-    if ((count ?? 0) >= LIMITS.MAX_FILES_PER_WORKSPACE) {
+    if (existing.length >= LIMITS.MAX_FILES_PER_WORKSPACE) {
       throw new ValidationError(
         `This workspace has reached the limit of ${LIMITS.MAX_FILES_PER_WORKSPACE} documents`
+      );
+    }
+
+    const usedBytes = existing.reduce((sum, f) => sum + f.file_size, 0);
+
+    if (usedBytes + file.size > LIMITS.MAX_WORKSPACE_STORAGE_BYTES) {
+      const limitMB = LIMITS.MAX_WORKSPACE_STORAGE_BYTES / 1024 / 1024;
+      throw new ValidationError(
+        `This file would take the workspace over its ${limitMB}MB storage limit`
       );
     }
 
@@ -83,16 +114,22 @@ export const documentService = {
       Create the document record in the database with QUEUED status.
       The ingestion worker will update this as it progresses.
     */
-    const document = await documentRepo.create({
-      id: documentId,
-      workspace_id: workspaceId,
-      title: title?.trim() || file.originalname,
-      original_filename: file.originalname,
-      storage_path: storagePath,
-      mime_type: file.mimetype,
-      file_size: file.size,
-      status: "QUEUED",
-    });
+    const document = await documentRepo
+      .create({
+        id: documentId,
+        workspace_id: workspaceId,
+        title: title?.trim() || file.originalname,
+        original_filename: file.originalname,
+        storage_path: storagePath,
+        mime_type: file.mimetype,
+        file_size: file.size,
+        status: "QUEUED",
+      })
+      .catch(async (err: unknown) => {
+        // Without a record nothing points at the file, so remove it
+        await removeFiles([storagePath]);
+        throw err;
+      });
 
     /*
       Dispatch the ingestion job to BullMQ.
@@ -135,16 +172,6 @@ export const documentService = {
       throw, the document is already gone from the DB and the
       orphaned file causes no functional harm.
     */
-    const { error } = await supabaseAdmin.storage
-      .from("documents")
-      .remove([storagePath]);
-
-    if (error) {
-      logger.warn("Storage file deletion failed after document delete", {
-        documentId,
-        storagePath,
-        error: error.message,
-      });
-    }
+    await removeFiles([storagePath]);
   },
 };
