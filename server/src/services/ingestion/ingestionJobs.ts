@@ -40,15 +40,22 @@ export const hasLiveJob = async (documentId: string): Promise<boolean> =>
   that id would also block the add, so it is removed first.
 */
 export const enqueueIngestion = async (
-  data: IngestionJobData
+  data: IngestionJobData,
+  options: { replaceWaiting?: boolean } = {}
 ): Promise<void> => {
   await withTimeout(
     (async () => {
       const queue = getIngestionQueue();
       const previous = await queue.getJob(data.documentId);
 
-      if (previous && FINISHED_STATES.has(await previous.getState())) {
-        await previous.remove();
+      if (previous) {
+        const state = await previous.getState();
+        // A job nobody picked up for too long is replaced by a fresh one
+        const replace = options.replaceWaiting && state !== "active";
+
+        if (FINISHED_STATES.has(state) || replace) {
+          await previous.remove();
+        }
       }
 
       await queue.add(data.documentId, data, { jobId: data.documentId });

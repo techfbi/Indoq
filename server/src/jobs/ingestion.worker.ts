@@ -1,6 +1,10 @@
 import { Worker, type Job } from "bullmq";
 import mammoth from "mammoth";
-import { QUEUE_NAMES, type IngestionJobData } from "../config/queue.js";
+import {
+  QUEUE_NAMES,
+  getIngestionQueue,
+  type IngestionJobData,
+} from "../config/queue.js";
 import { getRedis } from "../config/redis.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { LIMITS } from "../config/limits.js";
@@ -261,14 +265,21 @@ const handleFailed = async (
   }
 };
 
-/*
-  Creates and starts the BullMQ worker.
-  Called once at server startup.
-*/
-export const startIngestionWorker = () => {
+// How often the watchdog checks, and how long jobs may wait with nobody working
+const WATCHDOG_INTERVAL_MS = 30_000;
+const IDLE_WITH_WAITING_JOBS_MS = 60_000;
+
+const createWorker = (onStart: () => void, onEnd: () => void) => {
   const worker = new Worker<IngestionJobData>(
     QUEUE_NAMES.DOCUMENT_INGESTION,
-    processJob,
+    async (job) => {
+      onStart();
+      try {
+        await processJob(job);
+      } finally {
+        onEnd();
+      }
+    },
     {
       connection: getRedis(),
       concurrency: CONCURRENCY,
@@ -282,6 +293,62 @@ export const startIngestionWorker = () => {
       error: err.message,
     });
   });
+
+  return worker;
+};
+
+/*
+  Creates and starts the BullMQ worker.
+  Called once at server startup.
+
+  A worker can stop receiving jobs without any error, for example when
+  the connection to a hosted Redis is dropped silently while it waits.
+  Jobs then sit as QUEUED forever. The watchdog notices waiting jobs
+  while nothing is being processed, and replaces the worker.
+*/
+export const startIngestionWorker = () => {
+  let running = 0;
+  let lastActivity = Date.now();
+
+  const touch = () => {
+    lastActivity = Date.now();
+  };
+  const onStart = () => {
+    running++;
+    touch();
+  };
+  const onEnd = () => {
+    running--;
+    touch();
+  };
+
+  let worker = createWorker(onStart, onEnd);
+
+  const watchdog = setInterval(async () => {
+    try {
+      const waiting = await getIngestionQueue().getWaitingCount();
+      const idleFor = Date.now() - lastActivity;
+
+      if (waiting === 0 || running > 0 || idleFor < IDLE_WITH_WAITING_JOBS_MS) {
+        return;
+      }
+
+      logger.warn("Jobs are waiting but the worker is idle, restarting it", {
+        waiting,
+        idleSeconds: Math.round(idleFor / 1000),
+      });
+
+      const stuckWorker = worker;
+      worker = createWorker(onStart, onEnd);
+      touch();
+      await stuckWorker.close(true).catch(() => undefined);
+    } catch (err) {
+      logger.warn("Worker watchdog check failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, WATCHDOG_INTERVAL_MS);
+  watchdog.unref();
 
   logger.info("Ingestion worker started", { concurrency: CONCURRENCY });
 

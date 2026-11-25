@@ -20,6 +20,9 @@ import path from "path";
 
 type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 
+// Matches the client, which offers retry after the same time
+const STUCK_AFTER_MS = 5 * 60 * 1000;
+
 // Postgres unique violation
 const UNIQUE_VIOLATION = "23505";
 
@@ -29,16 +32,20 @@ const UNIQUE_VIOLATION = "23505";
 */
 const startIngestion = async (
   document: DocumentRow,
-  userId: string
+  userId: string,
+  replaceWaiting = false
 ): Promise<DocumentRow> => {
   try {
-    await enqueueIngestion({
-      documentId: document.id,
-      workspaceId: document.workspace_id,
-      userId,
-      storagePath: document.storage_path,
-      mimeType: document.mime_type,
-    });
+    await enqueueIngestion(
+      {
+        documentId: document.id,
+        workspaceId: document.workspace_id,
+        userId,
+        storagePath: document.storage_path,
+        mimeType: document.mime_type,
+      },
+      { replaceWaiting }
+    );
     return document;
   } catch (err) {
     logger.error("Could not queue document", {
@@ -225,14 +232,22 @@ export const documentService = {
     );
 
     if (document.status === "READY") return document;
-    if (await hasLiveJob(documentId)) return document;
+
+    /*
+      A live job normally means it is already being handled. But if the
+      document has not moved for several minutes, the job is stuck, for
+      example because the worker stopped. Then retry replaces it.
+    */
+    const idleMs = Date.now() - new Date(document.updated_at).getTime();
+    const stuck = idleMs > STUCK_AFTER_MS;
+    if (!stuck && (await hasLiveJob(documentId))) return document;
 
     const claimed = await documentRepo.claimForRetry(document);
     if (!claimed) {
       return documentRepo.findById(documentId, workspaceId, accessToken);
     }
 
-    return startIngestion(claimed, userId);
+    return startIngestion(claimed, userId, stuck);
   },
 
   delete: async (
