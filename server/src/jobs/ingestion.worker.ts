@@ -88,6 +88,17 @@ const downloadFile = async (storagePath: string): Promise<Buffer> => {
   return Buffer.from(await response.arrayBuffer());
 };
 
+/*
+  PDFs sometimes contain null characters or broken Unicode pairs.
+  Postgres cannot store either and rejects the whole save with
+  "unsupported Unicode escape sequence", so remove them up front.
+*/
+const UNSTORABLE_CHARS =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+const stripUnstorableChars = (text: string): string =>
+  text.replace(UNSTORABLE_CHARS, "");
+
 const assertPageLimit = (pageCount: number): void => {
   if (pageCount > LIMITS.MAX_PAGES_PER_DOCUMENT) {
     throw new PermanentIngestionError(
@@ -128,7 +139,7 @@ const prepareChunks = async ({
   await documentRepo.updatePageCount(documentId, extracted.pageCount);
 
   await enterStage(documentId, "CHUNKING");
-  const chunks = chunkDocument(extracted.text);
+  const chunks = chunkDocument(stripUnstorableChars(extracted.text));
 
   if (chunks.length === 0) {
     throw new PermanentIngestionError(
