@@ -23,7 +23,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "w-full px-4 py-2.5 text-sm font-medium rounded-md transition-colors",
+          "w-full px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-150 active:scale-[0.97]",
           "disabled:opacity-50 disabled:cursor-not-allowed",
           "focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2",
           variant === "primary" && "bg-accent text-white hover:bg-accent-hover",

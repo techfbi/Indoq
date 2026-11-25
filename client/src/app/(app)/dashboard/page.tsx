@@ -1,42 +1,94 @@
 "use client";
 
+import { AnimatePresence, motion } from "framer-motion";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useUIStore } from "@/store/ui.store";
-import Button from "@/components/ui/Button";
+import { riseItem, staggerParent } from "@/lib/motion";
+import WorkspaceCard from "@/components/workspace/WorkspaceCard";
 
-export default function DashboardPage() {
+const DashboardPage = () => {
   const setCreateModalOpen = useUIStore((s) => s.setCreateWorkspaceModalOpen);
+  const { data: workspaces, isLoading, isError } = useWorkspaces();
+  const { user } = useAuth();
+
+  const fullName = user?.user_metadata?.["full_name"] as string | undefined;
+  const firstName = fullName?.trim().split(/\s+/)[0];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-6 text-center">
-      <div className="w-10 h-10 rounded-lg border border-border flex items-center justify-center mb-4">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-text-disabled"
-          aria-hidden="true"
-        >
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-      </div>
-      <p className="text-sm font-medium text-text-primary">
-        Select a workspace
-      </p>
-      <p className="text-xs text-text-secondary mt-1 max-w-xs">
-        Choose a workspace from the sidebar or create a new one to get started
-      </p>
-      <Button
-        onClick={() => setCreateModalOpen(true)}
-        className="w-auto px-5 mt-5"
+    <motion.div
+      variants={staggerParent}
+      initial="hidden"
+      animate="visible"
+      className="max-w-5xl mx-auto px-6 py-12 sm:py-20"
+    >
+      <motion.h1
+        variants={riseItem}
+        className="font-display font-extrabold text-3xl sm:text-5xl tracking-tight text-text-primary"
       >
-        New workspace
-      </Button>
-    </div>
+        {firstName ? `Welcome back, ${firstName}` : "Welcome back"}
+      </motion.h1>
+      <motion.p variants={riseItem} className="mt-3 text-sm text-text-secondary">
+        Pick a workspace to keep going, or start a new one.
+      </motion.p>
+
+      {isError && (
+        <p role="alert" className="mt-8 text-sm text-danger">
+          Could not load your workspaces. Please refresh to try again.
+        </p>
+      )}
+
+      {isLoading ? (
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-34 rounded-lg border border-border bg-surface-raised animate-pulse"
+            />
+          ))}
+        </div>
+      ) : (
+        <motion.div
+          variants={staggerParent}
+          initial="hidden"
+          animate="visible"
+          className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <AnimatePresence mode="popLayout">
+            {workspaces?.map((workspace) => (
+              <WorkspaceCard key={workspace.id} workspace={workspace} />
+            ))}
+          </AnimatePresence>
+
+          <motion.button
+            layout
+            type="button"
+            variants={riseItem}
+            whileHover={{ y: -3 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setCreateModalOpen(true)}
+            className="group min-h-34 rounded-lg border border-dashed border-border-strong text-sm text-text-secondary hover:text-accent hover:border-accent transition-colors flex flex-col items-center justify-center gap-2"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="transition-transform duration-300 group-hover:rotate-90"
+            >
+              <path d="M5 12h14M12 5v14" />
+            </svg>
+            New workspace
+          </motion.button>
+        </motion.div>
+      )}
+    </motion.div>
   );
-}
+};
+
+export default DashboardPage;

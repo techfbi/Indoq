@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import { motion } from "framer-motion";
 import type { Document } from "@/types/document";
+import { EASE_OUT, SPRING, riseItem } from "@/lib/motion";
+import { DocumentProgress } from "./DocumentProgress";
 import { DocumentStatusBadge } from "./DocumentStatusBadge";
 import { useDeleteDocument } from "@/hooks/useDocuments";
 import { api } from "@/lib/api";
@@ -76,7 +79,15 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
   };
 
   return (
-    <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-surface hover:border-border-strong transition-colors">
+    <motion.div
+      layout
+      variants={riseItem}
+      initial="hidden"
+      animate="visible"
+      exit={{ opacity: 0, x: -24, transition: { duration: 0.2, ease: EASE_OUT } }}
+      transition={SPRING}
+      className="relative overflow-hidden flex items-center justify-between p-4 rounded-lg border border-border bg-surface hover:border-border-strong transition-colors"
+    >
       <div className="flex items-start gap-3 min-w-0">
         <div className="w-9 h-9 rounded-md border border-border flex items-center justify-center text-text-secondary bg-surface-raised shrink-0 mt-0.5">
           <svg
@@ -200,7 +211,9 @@ export const DocumentItem = ({ document }: DocumentItemProps) => {
           </>
         )}
       </div>
-    </div>
+
+      <DocumentProgress status={document.status} />
+    </motion.div>
   );
 };
 

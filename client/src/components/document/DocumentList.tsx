@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { AnimatePresence } from "framer-motion";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useDocumentStatus } from "@/hooks/useDocumentStatus";
 import { useUIStore } from "@/store/ui.store";
@@ -93,9 +94,11 @@ export const DocumentList = ({ workspaceId }: DocumentListProps) => {
       </div>
 
       <div className="space-y-2.5">
-        {documents.map((doc) => (
-          <DocumentItem key={doc.id} document={doc} />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {documents.map((doc) => (
+            <DocumentItem key={doc.id} document={doc} />
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

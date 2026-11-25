@@ -172,7 +172,8 @@ const ConversationPage = () => {
             streamingMessage={streamingMessage}
             streamingCitations={streamingCitations}
             streamingError={streamingError}
-            onSelectCitation={(c) => setSelectedCitation(c)}
+            onSelectCitation={setSelectedCitation}
+            onSuggestion={handleSend}
           />
         )}
       </main>

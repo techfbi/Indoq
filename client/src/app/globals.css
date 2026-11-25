@@ -144,6 +144,7 @@
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
@@ -159,6 +160,47 @@
 
   :focus:not(:focus-visible) {
     outline: none;
+  }
+
+  /*
+    Writing caret at the end of a streaming answer
+  */
+  .stream-caret > :is(p, h3, h4, h5):last-child::after,
+  .stream-caret > :is(ul, ol):last-child > li:last-child::after {
+    content: "";
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-left: 3px;
+    vertical-align: -0.15em;
+    background: var(--color-accent);
+    animation: caret 1s steps(2, jump-none) infinite;
+  }
+
+  @keyframes caret {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /*
+    Light sweep across text while waiting for an answer
+  */
+  .text-shimmer {
+    color: transparent;
+    background: linear-gradient(
+        90deg,
+        var(--color-text-disabled) 35%,
+        var(--color-text-primary) 50%,
+        var(--color-text-disabled) 65%
+      )
+      0 0 / 250% 100%;
+    background-clip: text;
+    animation: text-shimmer 1.8s linear infinite;
+  }
+
+  @keyframes text-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -50% 0; }
   }
 
     @keyframes shimmer {

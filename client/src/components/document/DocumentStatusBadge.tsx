@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { DocumentStatus } from "@/types/document";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +60,7 @@ export const DocumentStatusBadge = ({
     <span
       title={errorMessage ? `Error: ${errorMessage}` : undefined}
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border tracking-wide",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border tracking-wide transition-colors duration-300 shrink-0",
         config.className
       )}
     >
@@ -79,7 +82,17 @@ export const DocumentStatusBadge = ({
           aria-hidden="true"
         />
       )}
-      {config.label}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={status}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.15 }}
+        >
+          {config.label}
+        </motion.span>
+      </AnimatePresence>
     </span>
   );
 };

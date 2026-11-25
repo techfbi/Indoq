@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import {
@@ -15,6 +20,7 @@ import { useWorkspaceStore } from "@/store/workspace.store";
 import { useUIStore } from "@/store/ui.store";
 import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
+import { SPRING } from "@/lib/motion";
 import type { Workspace } from "@/types/workspace";
 import type { Conversation } from "@/types/conversation";
 
@@ -116,7 +122,12 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    await deleteConversationMutation.mutateAsync(conversationId);
+    // The hook logs failures, stay on the page when a delete fails
+    try {
+      await deleteConversationMutation.mutateAsync(conversationId);
+    } catch {
+      return;
+    }
     if (pathname.includes(`/conversation/${conversationId}`) && activeWorkspaceId) {
       router.push(`/workspace/${activeWorkspaceId}`);
     }
@@ -197,15 +208,23 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
                     href={`/workspace/${workspace.id}`}
                     onClick={() => handleWorkspaceClick(workspace.id)}
                     className={cn(
-                      "flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors w-full",
+                      "relative flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors w-full",
                       isActive
-                        ? "bg-accent-muted text-accent font-medium"
+                        ? "text-accent font-medium"
                         : isParentActive
                           ? "text-text-primary font-medium hover:bg-surface-raised"
                           : "text-text-secondary hover:text-text-primary hover:bg-surface-raised"
                     )}
                   >
-                    <span className="truncate">{workspace.name}</span>
+                    {isActive && (
+                      <motion.span
+                        layoutId="active-item"
+                        transition={SPRING}
+                        className="absolute inset-0 rounded-md bg-accent-muted"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="relative truncate">{workspace.name}</span>
                   </Link>
                 );
               })}
@@ -265,23 +284,37 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
               conversations &&
               conversations.length > 0 && (
                 <nav aria-label="Conversations" className="space-y-0.5">
+                  <AnimatePresence initial={false} mode="popLayout">
                   {conversations.map((conv: Conversation) => {
                     const convHref = `/workspace/${activeWorkspaceId}/conversation/${conv.id}`;
                     const isConvActive = pathname === convHref;
                     return (
-                      <div
+                      <motion.div
                         key={conv.id}
+                        layout="position"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.2 }}
                         className={cn(
-                          "group flex items-center justify-between rounded-md text-xs transition-colors w-full",
+                          "relative group flex items-center justify-between rounded-md text-xs transition-colors w-full",
                           isConvActive
-                            ? "bg-accent-muted text-accent font-medium"
+                            ? "text-accent font-medium"
                             : "text-text-secondary hover:text-text-primary hover:bg-surface-raised"
                         )}
                       >
+                        {isConvActive && (
+                          <motion.span
+                            layoutId="active-item"
+                            transition={SPRING}
+                            className="absolute inset-0 rounded-md bg-accent-muted"
+                            aria-hidden="true"
+                          />
+                        )}
                         <Link
                           href={convHref}
                           onClick={onNavigate}
-                          className="flex-1 px-2 py-1.5 truncate"
+                          className="relative flex-1 px-2 py-1.5 truncate"
                         >
                           {conv.title || "Untitled conversation"}
                         </Link>
@@ -290,7 +323,7 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
                           onClick={(e) => handleDeleteConversation(e, conv.id)}
                           aria-label="Delete conversation"
                           title="Delete conversation"
-                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 mr-1 rounded text-text-disabled hover:text-danger transition-opacity"
+                          className="relative opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 mr-1 rounded text-text-disabled hover:text-danger transition-opacity"
                         >
                           <svg
                             width="12"
@@ -306,9 +339,10 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
                             <path d="M18 6L6 18M6 6l12 12" />
                           </svg>
                         </button>
-                      </div>
+                      </motion.div>
                     );
                   })}
+                  </AnimatePresence>
                 </nav>
               )}
           </div>
@@ -335,7 +369,18 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
             aria-label={`Theme: ${theme}`}
             title={`Theme: ${theme}`}
           >
-            {THEME_ICONS[theme]}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={theme}
+                initial={{ rotate: -60, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: 60, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="block"
+              >
+                {THEME_ICONS[theme]}
+              </motion.span>
+            </AnimatePresence>
           </button>
 
           <button
@@ -368,7 +413,10 @@ const Sidebar = () => {
     <>
       {/* Desktop sidebar always visible on lg and above */}
       <aside className="hidden lg:flex flex-col w-65 shrink-0 border-r border-border bg-surface h-screen sticky top-0">
-        <SidebarContent />
+        {/* Own group, the overlay copy must not share its sliding pill */}
+        <LayoutGroup id="sidebar-desktop">
+          <SidebarContent />
+        </LayoutGroup>
       </aside>
 
       {/* Tablet overlay sidebar */}
@@ -394,7 +442,9 @@ const Sidebar = () => {
               }}
               className="fixed left-0 top-0 h-full w-65 bg-surface border-r border-border z-50 lg:hidden"
             >
-              <SidebarContent onNavigate={() => setSidebarOpen(false)} />
+              <LayoutGroup id="sidebar-overlay">
+                <SidebarContent onNavigate={() => setSidebarOpen(false)} />
+              </LayoutGroup>
             </motion.aside>
           </>
         )}

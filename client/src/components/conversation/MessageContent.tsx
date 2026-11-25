@@ -1,65 +1,13 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useDeferredValue, useMemo } from "react";
 import type { Citation } from "@/types/conversation";
 import { parseContentSegments } from "@/lib/diagram";
 import {
   DiagramPlaceholder,
   MermaidDiagram,
 } from "@/components/diagrams/MermaidDiagram";
-import { CitationBadge } from "./CitationBadge";
-
-interface TextWithCitationsProps {
-  content: string;
-  citations: Citation[];
-  onSelectCitation?: (citation: Citation) => void;
-}
-
-/*
-  Replaces [Doc N] tags in a text segment with interactive
-  CitationBadge components. Moved here from ChatMessage so both
-  saved messages and the live streaming message share it.
-*/
-const TextWithCitations = ({
-  content,
-  citations,
-  onSelectCitation,
-}: TextWithCitationsProps) => {
-  if (!onSelectCitation || citations.length === 0) {
-    return <p className="whitespace-pre-wrap leading-relaxed">{content}</p>;
-  }
-
-  /*
-    Split by [Doc N] tokens, keeping the matched delimiters.
-    Also accepts 【Doc N】 with full width brackets, which gpt oss
-    models emit in short answers. Keep in sync with the server
-    pattern in services/rag/citationMapper.ts.
-  */
-  const parts = content.split(/([[【]Doc\s*\d+[\]】])/gi);
-
-  return (
-    <div className="whitespace-pre-wrap leading-relaxed">
-      {parts.map((part, i) => {
-        const match = part.match(/^[[【]Doc\s*(\d+)[\]】]$/i);
-        if (match) {
-          const docNum = parseInt(match[1], 10);
-          // Match by number, the list only holds sources the answer cited
-          const citation = citations.find((c) => c.index === docNum);
-          if (citation) {
-            return (
-              <CitationBadge
-                key={i}
-                citation={citation}
-                onClick={onSelectCitation}
-              />
-            );
-          }
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </div>
-  );
-};
+import { MarkdownText } from "./MarkdownText";
 
 interface MessageContentProps {
   content: string;
@@ -67,6 +15,9 @@ interface MessageContentProps {
   onSelectCitation?: (citation: Citation) => void;
   isStreaming?: boolean;
 }
+
+// Stable reference so memoized text does not rerender on every token
+const NO_CITATIONS: Citation[] = [];
 
 /*
   Renders assistant content as an ordered list of text and diagram
@@ -77,22 +28,28 @@ interface MessageContentProps {
 */
 export const MessageContent = ({
   content,
-  citations = [],
+  citations = NO_CITATIONS,
   onSelectCitation,
   isStreaming = false,
 }: MessageContentProps) => {
-  const segments = useMemo(() => parseContentSegments(content), [content]);
+  // Lets typing and scrolling stay smooth while tokens pour in
+  const deferredContent = useDeferredValue(content);
+  const segments = useMemo(
+    () => parseContentSegments(deferredContent),
+    [deferredContent]
+  );
 
   return (
     <div className="space-y-3">
       {segments.map((segment, i) => {
         if (segment.type === "text") {
           return (
-            <TextWithCitations
+            <MarkdownText
               key={i}
               content={segment.content}
               citations={citations}
               onSelectCitation={onSelectCitation}
+              showCaret={isStreaming && i === segments.length - 1}
             />
           );
         }

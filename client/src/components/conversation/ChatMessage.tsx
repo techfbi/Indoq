@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import type { Message, Citation } from "@/types/conversation";
 import { containsDiagram } from "@/lib/diagram";
+import { EASE_OUT } from "@/lib/motion";
 import { MessageContent } from "./MessageContent";
 
 interface ChatMessageProps {
@@ -18,7 +19,6 @@ export const ChatMessage = ({
   index = 0,
 }: ChatMessageProps) => {
   const isUser = message.role === "user";
-  const shouldReduceMotion = useReducedMotion();
 
   // Bubbles shrink to their text, diagrams need the full width to draw into
   const hasDiagram = !isUser && containsDiagram(message.content);
@@ -34,12 +34,20 @@ export const ChatMessage = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      /*
+        An answer that just finished streaming is already on screen,
+        so it takes over in place without a second entrance.
+      */
+      initial={
+        message.id.startsWith("temp_assistant")
+          ? false
+          : { opacity: 0, y: 12, scale: isUser ? 0.98 : 1 }
+      }
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{
-        duration: shouldReduceMotion ? 0 : 0.2,
-        delay: shouldReduceMotion ? 0 : Math.min(index * 0.15, 0.6),
-        ease: "easeOut",
+        duration: 0.35,
+        delay: Math.min(index * 0.04, 0.2),
+        ease: EASE_OUT,
       }}
       className={`flex flex-col py-3 ${
         isUser ? "items-end" : "items-start"

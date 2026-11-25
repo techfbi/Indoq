@@ -25,8 +25,8 @@ export interface CitationReference {
   diagram with nothing grounded to draw would be fabricated content.
 */
 const DIAGRAM_RULES = `DIAGRAMS:
-- Include a diagram only when the user asks for one (diagram, flowchart, chart, map, visualise, draw) or when the documents describe a process, sequence, hierarchy, lifecycle, or set of relationships that a diagram would make clearer.
-- Use at most one diagram per answer and always explain it in prose as well.
+- Include a diagram only when the user asks for one (diagram, flowchart, chart, map, visualise, draw) or when they ask how a process, sequence, hierarchy, lifecycle, or set of relationships works and a diagram would make it clearer.
+- Use at most one diagram per answer. The diagram replaces the step by step text, so write only one to three sentences beside it and never list its steps again in prose or bullets.
 - Write the diagram in Mermaid syntax inside a fenced code block that starts with \`\`\`mermaid on its own line and ends with \`\`\` on its own line.
 - Use only these diagram types: flowchart TD, flowchart LR, sequenceDiagram, stateDiagram-v2, classDiagram, erDiagram, mindmap, timeline.
 - Keep it to 12 nodes or fewer. Merge minor steps into one node rather than drawing every detail.
@@ -34,6 +34,17 @@ const DIAGRAM_RULES = `DIAGRAMS:
 - Do not use brackets or double quotes inside label text.
 - Every node and relationship must come from the document context. Never add steps the documents do not mention.
 - Never put [Doc N] citations inside the diagram. Cite the sources in the sentence before or after it.`;
+
+/*
+  Keeps answers as long as the question deserves and no longer.
+  The client renders markdown, so light formatting is welcome.
+*/
+const STYLE_RULES = `ANSWER LENGTH AND FORMAT:
+- Answer first. No preamble, no restating the question, no closing summary, and no remarks about where the answer came from beyond citations.
+- Match length to the question. A fact gets one or two sentences. A how or why question gets a short paragraph or up to five brief bullets, under 90 words. Go longer only when the user asks for detail, a full list, a comparison, or a summary of a whole document.
+- Greetings and small talk get one friendly sentence. Do not mention missing documents for those.
+- Use markdown lightly: bold for a key term, bullets for real lists, a table only for comparisons. Use headings only in long answers.
+- Write citations exactly as [Doc N] with square brackets, one document per bracket, right after the claim and never inside code.`;
 
 /*
   Builds the system prompt that controls AI behaviour.
@@ -64,7 +75,9 @@ IMPORTANT RULES:
 - Distinguish clearly between what the documents say and any general reasoning you apply.
 - Keep answers focused and grounded. Cite sources using [Doc N] notation inline.${
     insufficient ? "" : `\n\n${DIAGRAM_RULES}`
-  }`;
+  }
+
+${STYLE_RULES}`;
 };
 
 /*
