@@ -30,13 +30,8 @@ export const documentService = {
 
     /*
       Check the workspace has not exceeded the maximum file count.
-      Count existing documents regardless of status.
-    */
-    const existing = await documentRepo.findAllByWorkspace(workspaceId, userId + "admin", );
-
-    /*
-      We use supabaseAdmin for the count check since we need the
-      true count including failed documents.
+      Uses supabaseAdmin because we need the true count regardless
+      of status, including failed documents.
     */
     const { count, error: countError } = await supabaseAdmin
       .from("documents")

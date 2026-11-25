@@ -25,7 +25,9 @@ export const LIMITS = {
   //This controls your RAG pipeline. 
   RETRIEVAL_TOP_K: 20, //how many matching chunks w want back.
   CONTEXT_TOP_K: 10,
-  MIN_RELEVANCE_SCORE: 0.3, //helps determine:"Are these chunks actually relevant enough to answer this question?"
+  // Cosine similarity of the best vector match, 0 to 1. Not an RRF score, which never exceeds about 0.033.
+  // Starting value, calibrate against real embeddings. Kept low because the system prompt already refuses to answer beyond the context.
+  MIN_RELEVANCE_SCORE: 0.2,
 
   MAX_CONTEXT_TOKENS: 8000, //These prevent from dumping unlimited material into the LLM.
   MAX_RESPONSE_TOKENS: 2000,

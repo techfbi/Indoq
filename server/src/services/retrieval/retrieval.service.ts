@@ -31,8 +31,10 @@ const embedQuery = async (query: string): Promise<number[]> => {
   Runs vector search and full text search in parallel then
   merges results using Reciprocal Rank Fusion.
   Returns the top CONTEXT_TOP_K chunks sorted by RRF score.
-  If the top result's RRF score is below MIN_RELEVANCE_SCORE
-  the retrieval is considered insufficient.
+  Retrieval is insufficient when nothing was found, or when there is
+  no keyword match and the best cosine similarity is below
+  MIN_RELEVANCE_SCORE. RRF scores only rank results, they say
+  nothing about how relevant a result is.
 */
 export const retrieve = async (
   query: string,
@@ -79,11 +81,14 @@ export const retrieve = async (
     vectorCount: vector.length,
     ftsCount: fts.length,
     fusedCount: fused.length,
+    topSimilarity: vector[0]?.score ?? 0,
     retrievalMs,
   });
 
-  const topScore = fused[0]?.rrfScore ?? 0;
-  const insufficient = fused.length === 0 || topScore < LIMITS.MIN_RELEVANCE_SCORE;
+  const topSimilarity = vector[0]?.score ?? 0;
+  const insufficient =
+    fused.length === 0 ||
+    (fts.length === 0 && topSimilarity < LIMITS.MIN_RELEVANCE_SCORE);
 
   return { chunks: fused, insufficient };
 };

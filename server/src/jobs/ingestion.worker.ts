@@ -9,23 +9,10 @@ import mammoth from "mammoth";
 import { chunkDocument } from "../services/ingestion/chunker.js";
 import { embedChunks } from "../services/ingestion/embedder.js";
 import { chunkRepo } from "../repositories/chunk.repo.js";
-//pdf-parse is a CommonJS package that does not export a proper ESM default
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-interface PdfParseOptions {
-  pagerender?: (pageData: unknown) => string | Promise<string>;
-  max?: number;
-}
-
-interface PdfParseResult {
-  text: string;
-  numpages: number;
-}
-
-const pdfParse = require("pdf-parse") as (
-  buffer: Buffer,
-  options?: PdfParseOptions
-) => Promise<PdfParseResult>;
+import {
+  extractPdfText,
+  getPdfPageCount,
+} from "../services/ingestion/pdfExtractor.js";
 
 /*
   The worker listens on the document-ingestion queue and processes
@@ -42,20 +29,6 @@ export interface ExtractedDocument {
 }
 
 /*
-  Checks PDF page count without extracting full text.
-  pdf-parse renders each page to get text by default.
-  Passing a pagerender function that returns an empty string
-  stops it from doing expensive text extraction per page
-  while still giving us numpages from the metadata.
-*/
-const getPdfPageCount = async (buffer: Buffer): Promise<number> => {
-  const result = await pdfParse(buffer, {
-    pagerender: () => Promise.resolve(""),
-  });
-  return result.numpages;
-};
-
-/*
   Extracts plain text from the file buffer based on MIME type.
   For PDFs the page count check must happen before calling this
   function. For other formats page count is estimated here.
@@ -67,11 +40,7 @@ const extractText = async (
 
   //for pdf... reads the PDF and extracts its text.
   if (mimeType === "application/pdf") {
-    const result = await pdfParse(buffer);
-    return {
-      text: result.text,
-      pageCount: result.numpages,
-    };
+    return extractPdfText(buffer);
   }
 
   //DOCX
