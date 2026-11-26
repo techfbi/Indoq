@@ -4,6 +4,7 @@
 */
 
 import type { Document } from "@/types/document";
+import type { Citation, Conversation, Message } from "@/types/conversation";
 
 const getBaseUrl = () =>
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -48,6 +49,9 @@ const request = async <T>(
     throw new Error(message);
   }
 
+  // Deletes answer 204 with no body, and parsing an empty body throws
+  if (res.status === 204) return undefined as T;
+
   return res.json() as Promise<T>;
 };
 
@@ -62,6 +66,8 @@ const upload = async <T>(path: string, formData: FormData): Promise<T> => {
     method: "POST",
     headers: authHeader,
     body: formData,
+  }).catch(() => {
+    throw new Error("Could not reach the server. Check your connection.");
   });
 
   if (!res.ok) {
@@ -88,7 +94,7 @@ export const streamQuery = async (
     documentId?: string;
   },
   onToken: (token: string) => void,
-  onDone: (conversationId: string, citations: unknown[]) => void,
+  onDone: (conversationId: string, citations: Citation[]) => void,
   onError: (message: string) => void
 ): Promise<void> => {
   const authHeader = await getAuthHeader();
@@ -125,6 +131,7 @@ export const streamQuery = async (
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let ended = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -147,15 +154,17 @@ export const streamQuery = async (
           type: string;
           token?: string;
           conversationId?: string;
-          citations?: unknown[];
+          citations?: Citation[];
           message?: string;
         };
 
         if (event.type === "token" && event.token) {
           onToken(event.token);
         } else if (event.type === "done") {
+          ended = true;
           onDone(event.conversationId ?? "", event.citations ?? []);
         } else if (event.type === "error") {
+          ended = true;
           onError(event.message ?? "Stream error");
         }
       } catch {
@@ -166,6 +175,9 @@ export const streamQuery = async (
       }
     }
   }
+
+  // Without this a dropped connection would look like endless writing
+  if (!ended) onError("The connection closed before the answer finished");
 };
 
 /*
@@ -201,10 +213,19 @@ export const api = {
       request<{ document: Document }>(
         `/api/workspaces/${workspaceId}/documents/${documentId}`
       ),
+    getFileUrl: (workspaceId: string, documentId: string) =>
+      request<{ url: string }>(
+        `/api/workspaces/${workspaceId}/documents/${documentId}/file`
+      ),
     upload: (workspaceId: string, formData: FormData) =>
       upload<{ document: Document }>(
         `/api/workspaces/${workspaceId}/documents`,
         formData
+      ),
+    retry: (workspaceId: string, documentId: string) =>
+      request<{ document: Document }>(
+        `/api/workspaces/${workspaceId}/documents/${documentId}/retry`,
+        { method: "POST" }
       ),
     delete: (workspaceId: string, documentId: string) =>
       request<void>(
@@ -215,13 +236,15 @@ export const api = {
 
   conversations: {
     list: (workspaceId: string) =>
-      request<{ conversations: unknown[] }>(
+      request<{ conversations: Conversation[] }>(
         `/api/workspaces/${workspaceId}/conversations`
       ),
     get: (conversationId: string) =>
-      request<{ conversation: unknown }>(`/api/conversations/${conversationId}`),
+      request<{ conversation: Conversation }>(
+        `/api/conversations/${conversationId}`
+      ),
     getMessages: (conversationId: string) =>
-      request<{ messages: unknown[] }>(
+      request<{ messages: Message[] }>(
         `/api/conversations/${conversationId}/messages`
       ),
     delete: (conversationId: string) =>

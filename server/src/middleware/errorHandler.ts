@@ -3,17 +3,45 @@ import { AppError } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
 import { env } from "../config/env.js";
 
-// Express's special 4-argument middleware
-// Unexpected errors log the full stack server-side but only return a generic message to the client, 
-// no stack traces, no DB internals, nothing exploitable, details is only included in development.
+/*
+  Extracts a readable message and metadata from unknown thrown values,
+  including plain Supabase PostgrestError objects which do not extend Error.
+*/
+const extractErrorInfo = (err: unknown) => {
+  if (err instanceof Error) {
+    return {
+      message: err.message,
+      stack: err.stack,
+    };
+  }
 
+  if (typeof err === "object" && err !== null) {
+    const record = err as Record<string, unknown>;
+    return {
+      message:
+        typeof record.message === "string"
+          ? record.message
+          : JSON.stringify(err),
+      code: record.code,
+      details: record.details,
+      hint: record.hint,
+    };
+  }
+
+  return {
+    message: String(err),
+  };
+};
+
+// Express 4 argument error handling middleware.
+// Operational errors return their specific status code and message.
+// Unexpected errors log full details server side and return a safe 500 message.
 export const errorHandler = (
-  err: unknown, //this tells Express it's an error handler
+  err: unknown,
   req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-    //Operational errors (our typed AppError subclasses) get user-friendly messages with the right status
   if (err instanceof AppError) {
     logger.warn("Operational error", {
       code: err.code,
@@ -21,7 +49,6 @@ export const errorHandler = (
       path: req.path,
       method: req.method,
     });
-
 
     res.status(err.statusCode).json({
       error: {
@@ -35,9 +62,10 @@ export const errorHandler = (
     return;
   }
 
+  const info = extractErrorInfo(err);
+
   logger.error("Unexpected error", {
-    error: err instanceof Error ? err.message : String(err),
-    stack: err instanceof Error ? err.stack : undefined,
+    ...info,
     path: req.path,
     method: req.method,
   });
@@ -46,6 +74,7 @@ export const errorHandler = (
     error: {
       code: "INTERNAL_ERROR",
       message: "Something went wrong. Please try again.",
+      ...(env.NODE_ENV !== "production" ? { details: info } : {}),
     },
   });
 };

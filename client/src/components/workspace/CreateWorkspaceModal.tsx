@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCreateWorkspace } from "@/hooks/useWorkspaces";
 import { useUIStore } from "@/store/ui.store";
@@ -23,7 +23,7 @@ const createSchema = z.object({
     .optional(),
 });
 
-export default function CreateWorkspaceModal() {
+const CreateWorkspaceModal = () => {
   const open = useUIStore((s) => s.createWorkspaceModalOpen);
   const setOpen = useUIStore((s) => s.setCreateWorkspaceModalOpen);
   const setActiveWorkspaceId = useWorkspaceStore((s) => s.setActiveWorkspaceId);
@@ -38,22 +38,29 @@ export default function CreateWorkspaceModal() {
 
   const { mutate: createWorkspace, isPending } = useCreateWorkspace();
 
+  const handleClose = useCallback(() => {
+    setName("");
+    setDescription("");
+    setErrors({});
+    setOpen(false);
+  }, [setOpen]);
+
+  /*
+    Focus the workspace name input when the modal opens
+  */
   useEffect(() => {
-    if (open) {
-      setName("");
-      setDescription("");
-      setErrors({});
-      setTimeout(() => nameRef.current?.focus(), 50);
-    }
+    if (!open) return;
+    const timer = setTimeout(() => nameRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") handleClose();
     };
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setOpen]);
+  }, [open, handleClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +84,7 @@ export default function CreateWorkspaceModal() {
       onSuccess: (data) => {
         const workspace = data.workspace as { id: string };
         setActiveWorkspaceId(workspace.id);
-        setOpen(false);
+        handleClose();
         router.push(`/workspace/${workspace.id}`);
       },
       onError: (error: Error) => {
@@ -100,7 +107,7 @@ export default function CreateWorkspaceModal() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 bg-black/30 z-40"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
             aria-hidden="true"
           />
 
@@ -124,7 +131,7 @@ export default function CreateWorkspaceModal() {
                   New workspace
                 </h2>
                 <button
-                  onClick={() => setOpen(false)}
+                  onClick={handleClose}
                   className="text-text-disabled hover:text-text-secondary transition-colors"
                   aria-label="Close"
                 >
@@ -183,7 +190,7 @@ export default function CreateWorkspaceModal() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setOpen(false)}
+                    onClick={handleClose}
                   >
                     Cancel
                   </Button>
@@ -198,4 +205,6 @@ export default function CreateWorkspaceModal() {
       )}
     </AnimatePresence>
   );
-}
+};
+
+export default CreateWorkspaceModal;

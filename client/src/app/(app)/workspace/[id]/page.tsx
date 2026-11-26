@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useWorkspaceStore } from "@/store/workspace.store";
 import { useUIStore } from "@/store/ui.store";
@@ -10,10 +11,11 @@ import { DocumentList } from "@/components/document/DocumentList";
 import { DocumentUploadModal } from "@/components/document/DocumentUploadModal";
 import Button from "@/components/ui/Button";
 
-export default function WorkspaceDetailPage() {
+const WorkspaceDetailPage = () => {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.id as string;
+  const shouldReduceMotion = useReducedMotion();
 
   const { data: workspaces, isLoading: isWorkspacesLoading } = useWorkspaces();
   const setActiveWorkspaceId = useWorkspaceStore((s) => s.setActiveWorkspaceId);
@@ -31,7 +33,13 @@ export default function WorkspaceDetailPage() {
   }, [workspaceId, setActiveWorkspaceId]);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
+    <motion.div
+      key={workspaceId}
+      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: "easeOut" }}
+      className="max-w-5xl mx-auto px-6 py-8"
+    >
       {/* Workspace Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 mb-8 border-b border-border">
         <div>
@@ -51,7 +59,8 @@ export default function WorkspaceDetailPage() {
           </div>
 
           <h1 className="font-display font-bold text-2xl sm:text-3xl text-text-primary">
-            {workspace?.name ?? (isWorkspacesLoading ? "Loading..." : "Workspace")}
+            {workspace?.name ??
+              (isWorkspacesLoading ? "Loading..." : "Workspace")}
           </h1>
 
           {workspace?.description && (
@@ -70,7 +79,9 @@ export default function WorkspaceDetailPage() {
             Upload Document
           </Button>
           <Button
-            onClick={() => router.push(`/workspace/${workspaceId}/conversation/new`)}
+            onClick={() =>
+              router.push(`/workspace/${workspaceId}/conversation/new`)
+            }
             className="w-auto text-xs px-4 py-2"
           >
             Ask Questions
@@ -85,7 +96,8 @@ export default function WorkspaceDetailPage() {
 
       {/* Upload Modal */}
       <DocumentUploadModal workspaceId={workspaceId} />
-    </div>
+    </motion.div>
   );
-}
+};
 
+export default WorkspaceDetailPage;

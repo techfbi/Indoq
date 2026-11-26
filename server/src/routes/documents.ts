@@ -6,6 +6,7 @@ import { uploadMiddleware } from "../middleware/upload.js";
 import { documentController } from "../controllers/document.controller.js";
 import {
   documentParamsSchema,
+  uploadDocumentBodySchema,
   workspaceOnlyParamSchema,
 } from "../validators/document.schema.js";
 
@@ -30,6 +31,7 @@ router.post(
   rateLimit("upload"),
   validate({ params: workspaceOnlyParamSchema }),
   uploadMiddleware,
+  validate({ body: uploadDocumentBodySchema }),
   documentController.upload
 );
 
@@ -37,6 +39,19 @@ router.get(
   "/:documentId",
   validate({ params: documentParamsSchema }),
   documentController.getById
+);
+
+router.get(
+  "/:documentId/file",
+  validate({ params: documentParamsSchema }),
+  documentController.getFileUrl
+);
+
+router.post(
+  "/:documentId/retry",
+  rateLimit("retry"),
+  validate({ params: documentParamsSchema }),
+  documentController.retry
 );
 
 router.delete(

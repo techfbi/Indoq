@@ -1,110 +1,73 @@
 import { Worker, type Job } from "bullmq";
+import mammoth from "mammoth";
+import {
+  QUEUE_NAMES,
+  getIngestionQueue,
+  type IngestionJobData,
+} from "../config/queue.js";
 import { getRedis } from "../config/redis.js";
 import { supabaseAdmin } from "../config/supabase.js";
-import { documentRepo } from "../repositories/document.repo.js";
 import { LIMITS } from "../config/limits.js";
-import { logger } from "../utils/logger.js";
-import type { IngestionJobData } from "../config/queue.js";
-import mammoth from "mammoth";
-import { chunkDocument } from "../services/ingestion/chunker.js";
-import { embedChunks } from "../services/ingestion/embedder.js";
 import { chunkRepo } from "../repositories/chunk.repo.js";
-//pdf-parse is a CommonJS package that does not export a proper ESM default
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-interface PdfParseOptions {
-  pagerender?: (pageData: unknown) => string | Promise<string>;
-  max?: number;
-}
-
-interface PdfParseResult {
-  text: string;
-  numpages: number;
-}
-
-const pdfParse = require("pdf-parse") as (
-  buffer: Buffer,
-  options?: PdfParseOptions
-) => Promise<PdfParseResult>;
+import { documentRepo } from "../repositories/document.repo.js";
+import { chunkDocument } from "../services/ingestion/chunker.js";
+import { embedBatch } from "../services/ingestion/embedder.js";
+import {
+  DocumentDeletedError,
+  PermanentIngestionError,
+} from "../services/ingestion/ingestionErrors.js";
+import {
+  extractPdfText,
+  getPdfPageCount,
+} from "../services/ingestion/pdfExtractor.js";
+import type { DocumentStatus } from "../types/database.js";
+import { logger } from "../utils/logger.js";
 
 /*
-  The worker listens on the document-ingestion queue and processes
-  one job at a time per worker instance. Concurrency is set to 2
-  meaning at most 2 documents are processed simultaneously on this
-  server instance. will raise this only if memory allows, PDF parsing
-  and embedding generation are both memory intensive.
+  At most 2 documents are processed at once on this server instance.
+  Raise this only if memory allows, parsing and embedding are both
+  memory intensive.
 */
 const CONCURRENCY = 2;
+
+// How each stage reads in the message shown when processing stops
+const STAGE_LABELS: Partial<Record<DocumentStatus, string>> = {
+  EXTRACTING: "reading the file",
+  CHUNKING: "splitting the text",
+  EMBEDDING: "building the search index",
+  INDEXING: "finishing the search index",
+};
 
 export interface ExtractedDocument {
   text: string;
   pageCount: number;
 }
 
-/*
-  Checks PDF page count without extracting full text.
-  pdf-parse renders each page to get text by default.
-  Passing a pagerender function that returns an empty string
-  stops it from doing expensive text extraction per page
-  while still giving us numpages from the metadata.
-*/
-const getPdfPageCount = async (buffer: Buffer): Promise<number> => {
-  const result = await pdfParse(buffer, {
-    pagerender: () => Promise.resolve(""),
-  });
-  return result.numpages;
-};
+// DOCX, TXT and MD have no page count, so estimate 250 words per page
+const withEstimatedPages = (text: string): ExtractedDocument => ({
+  text,
+  pageCount: Math.ceil(text.split(/\s+/).length / 250),
+});
 
-/*
-  Extracts plain text from the file buffer based on MIME type.
-  For PDFs the page count check must happen before calling this
-  function. For other formats page count is estimated here.
-*/
 const extractText = async (
   buffer: Buffer,
   mimeType: string
 ): Promise<ExtractedDocument> => {
+  if (mimeType === "application/pdf") return extractPdfText(buffer);
 
-  //for pdf... reads the PDF and extracts its text.
-  if (mimeType === "application/pdf") {
-    const result = await pdfParse(buffer);
-    return {
-      text: result.text,
-      pageCount: result.numpages,
-    };
-  }
-
-  //DOCX
   if (
     mimeType ===
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
-    //Mammoth takes the Word document and extracts the readable text.
     const result = await mammoth.extractRawText({ buffer });
-    /*
-      DOCX has no reliable page count without rendering.
-      Estimate based on average words per page (250 words per page).
-    */
-    const wordCount = result.value.split(/\s+/).length;
-    const estimatedPages = Math.ceil(wordCount / 250);
-    return {
-      text: result.value,
-      pageCount: estimatedPages,
-    };
+    return withEstimatedPages(result.value);
   }
 
-  //TXT and Markdown
   if (mimeType === "text/plain" || mimeType === "text/markdown") {
-    const text = buffer.toString("utf8");
-    const wordCount = text.split(/\s+/).length;
-    const estimatedPages = Math.ceil(wordCount / 250);
-    return {
-      text,
-      pageCount: estimatedPages,
-    };
+    return withEstimatedPages(buffer.toString("utf8"));
   }
 
-  throw new Error(`Unsupported MIME type for extraction: ${mimeType}`);
+  throw new PermanentIngestionError("This document type is not supported.");
 };
 
 /*
@@ -113,176 +76,279 @@ const extractText = async (
   The file is never publicly accessible.
 */
 const downloadFile = async (storagePath: string): Promise<Buffer> => {
-  const { data: signedUrlData, error: signedUrlError } =
-    await supabaseAdmin.storage
-      .from("documents")
-      .createSignedUrl(storagePath, 60); //creates a temporary URL that expires after 60 seconds.
+  const { data, error } = await supabaseAdmin.storage
+    .from("documents")
+    .createSignedUrl(storagePath, 60);
 
-  if (signedUrlError || !signedUrlData?.signedUrl) {
-    throw new Error(`Failed to generate signed URL: ${signedUrlError?.message}`);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Failed to generate signed URL: ${error?.message}`);
   }
 
-  const response = await fetch(signedUrlData.signedUrl); //downloads the file.
-
+  const response = await fetch(data.signedUrl);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.statusText}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return Buffer.from(await response.arrayBuffer());
 };
 
 /*
-  Processes a single ingestion job.
-  Updates document status at each stage so Supabase Realtime
-  can push live progress to the client.
+  PDFs sometimes contain null characters or broken Unicode pairs.
+  Postgres cannot store either and rejects the whole save with
+  "unsupported Unicode escape sequence", so remove them up front.
 */
-const processJob = async (job: Job<IngestionJobData>): Promise<void> => {
-  const { documentId, workspaceId, storagePath, mimeType } = job.data;
+const UNSTORABLE_CHARS =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
-  logger.info("Ingestion job started", { documentId, workspaceId });
+const stripUnstorableChars = (text: string): string =>
+  text.replace(UNSTORABLE_CHARS, "");
 
-  try {
-    await documentRepo.updateStatus(documentId, "PROCESSING");
-    await documentRepo.updateStatus(documentId, "EXTRACTING");
+const assertPageLimit = (pageCount: number): void => {
+  if (pageCount > LIMITS.MAX_PAGES_PER_DOCUMENT) {
+    throw new PermanentIngestionError(
+      `This document has ${pageCount} pages. The limit is ${LIMITS.MAX_PAGES_PER_DOCUMENT} pages. Consider splitting it into sections.`
+    );
+  }
+};
 
-    const buffer = await downloadFile(storagePath);
+// Moves to the next stage, and stops if the document was deleted meanwhile
+const enterStage = async (
+  documentId: string,
+  status: DocumentStatus
+): Promise<void> => {
+  const stillExists = await documentRepo.updateStatus(documentId, status);
+  if (!stillExists) throw new DocumentDeletedError();
+};
 
-    /*
-      For PDFs check page count with a cheap metadata pass before
-      doing the expensive full text extraction.
-    */
-    if (mimeType === "application/pdf") {
-      const pageCount = await getPdfPageCount(buffer);
+/*
+  Reads and splits the file, then saves every chunk. Nothing here is
+  paid for. Skipped when an earlier attempt already got this far.
+*/
+const prepareChunks = async ({
+  documentId,
+  workspaceId,
+  storagePath,
+  mimeType,
+}: IngestionJobData): Promise<void> => {
+  await enterStage(documentId, "EXTRACTING");
+  const buffer = await downloadFile(storagePath);
 
-      if (pageCount > LIMITS.MAX_PAGES_PER_DOCUMENT) {
-        await documentRepo.updateStatus(
-          documentId,
-          "FAILED",
-          `This document has ${pageCount} pages. The limit is ${LIMITS.MAX_PAGES_PER_DOCUMENT} pages. Consider splitting it into sections.`
-        );
-        return;
-      }
+  // PDFs have a cheap page count, so check before extracting all the text
+  if (mimeType === "application/pdf") {
+    assertPageLimit(await getPdfPageCount(buffer));
+  }
 
-      await documentRepo.updatePageCount(documentId, pageCount);
-    }
+  const extracted = await extractText(buffer, mimeType);
+  assertPageLimit(extracted.pageCount);
+  await documentRepo.updatePageCount(documentId, extracted.pageCount);
 
-    const extracted = await extractText(buffer, mimeType);
+  await enterStage(documentId, "CHUNKING");
+  const chunks = chunkDocument(stripUnstorableChars(extracted.text));
 
-    logger.info("Text extraction complete", {
+  if (chunks.length === 0) {
+    throw new PermanentIngestionError(
+      "This document has no readable text. It may be a scanned image."
+    );
+  }
+
+  await chunkRepo.saveCheckpoint(documentId, workspaceId, chunks);
+  logger.info("Chunks saved", { documentId, chunkCount: chunks.length });
+};
+
+/*
+  Embeds only the chunks that have no embedding yet and saves each
+  batch before paying for the next, so a retry never pays again for
+  work that was already saved.
+*/
+const embedPendingChunks = async (documentId: string): Promise<void> => {
+  let embedded = 0;
+
+  for (;;) {
+    // Also the deletion check, right before each paid call
+    await enterStage(documentId, "EMBEDDING");
+
+    const pending = await chunkRepo.findPending(
       documentId,
-      pageCount: extracted.pageCount,
-      textLength: extracted.text.length,
-    });
+      LIMITS.EMBEDDING_BATCH_SIZE
+    );
+    if (pending.length === 0) break;
 
-    /*
-      For non-PDF formats enforce page count after extraction
-      since there is no cheaper pre-extraction check available.
-    */
-    if (mimeType !== "application/pdf") {
-      if (extracted.pageCount > LIMITS.MAX_PAGES_PER_DOCUMENT) {
-        await documentRepo.updateStatus(
-          documentId,
-          "FAILED",
-          `This document exceeds the ${LIMITS.MAX_PAGES_PER_DOCUMENT} page limit. Consider splitting it into sections.`
-        );
-        return;
-      }
-
-      await documentRepo.updatePageCount(documentId, extracted.pageCount);
-    }
-
-    /*
-      Split the extracted text into overlapping chunks that
-      preserve section structure and context boundaries.
-    */
-    await documentRepo.updateStatus(documentId, "CHUNKING");
-
-    const chunks = chunkDocument(extracted.text);
-
-    logger.info("Chunking complete", {
-      documentId,
-      chunkCount: chunks.length,
-    });
-
-    /*
-      Generate embeddings for all chunks using OpenAI
-      text-embedding-3-small in sequential batches.
-    */
-    await documentRepo.updateStatus(documentId, "EMBEDDING");
-
-    const embeddedChunks = await embedChunks(chunks);
-
-    logger.info("Embedding complete", {
-      documentId,
-      embeddedCount: embeddedChunks.length,
-    });
-
-    /*
-      Insert all embedded chunks into pgvector.
-      Upsert is idempotent so retries are safe.
-    */
-    await documentRepo.updateStatus(documentId, "INDEXING");
-
-    await chunkRepo.insertBatch(documentId, workspaceId, embeddedChunks);
-
-    logger.info("Indexing complete", { documentId });
-
-    await documentRepo.updateStatus(documentId, "READY");
-
-    logger.info("Ingestion job complete", {
-      documentId,
-      chunkCount: embeddedChunks.length,
-      pageCount: extracted.pageCount,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-
-    logger.error("Ingestion job failed", {
-      documentId,
-      workspaceId,
-      error: message,
-      attempt: job.attemptsMade,
-    });
-
-    const isLastAttempt = job.attemptsMade >= (job.opts.attempts ?? 1) - 1;
-
-    if (isLastAttempt) {
-      await documentRepo.updateStatus(
-        documentId,
-        "FAILED",
-        "Document processing failed. Please try uploading again."
+    // Saved batches leave the pending list, so this can only mean a bug
+    if (embedded >= LIMITS.MAX_CHUNKS_PER_DOCUMENT) {
+      throw new PermanentIngestionError(
+        "This document could not be indexed. Please contact support."
       );
     }
 
+    const embeddings = await embedBatch(pending.map((c) => c.content));
+    await chunkRepo.saveEmbeddings(pending, embeddings);
+    embedded += pending.length;
+
+    logger.info("Embedding batch saved", { documentId, embedded });
+  }
+};
+
+/*
+  Processes a single ingestion job, continuing from the checkpoint an
+  earlier attempt left behind. Updates document status at each stage
+  so Supabase Realtime can push live progress to the client.
+*/
+const processJob = async (job: Job<IngestionJobData>): Promise<void> => {
+  const { documentId } = job.data;
+
+  try {
+    const status = await documentRepo.findStatus(documentId);
+    if (status === null) throw new DocumentDeletedError();
+    if (status === "READY") return;
+
+    logger.info("Ingestion job started", { documentId });
+    await enterStage(documentId, "PROCESSING");
+
+    if (await chunkRepo.hasCheckpoint(documentId)) {
+      logger.info("Continuing from saved chunks", { documentId });
+    } else {
+      await prepareChunks(job.data);
+    }
+
+    await embedPendingChunks(documentId);
+    await enterStage(documentId, "INDEXING");
+    await enterStage(documentId, "READY");
+
+    logger.info("Ingestion job complete", { documentId });
+  } catch (err) {
+    if (err instanceof DocumentDeletedError) {
+      logger.info("Document deleted, ingestion stopped", { documentId });
+      return;
+    }
     throw err;
   }
 };
 
 /*
-  Creates and starts the BullMQ worker.
-  we call this once at server startup.
+  Marks the document FAILED once BullMQ has given up on the job. Doing
+  it here rather than inside the job means the job is already out of
+  the way when the user clicks retry, and it also covers jobs that
+  stalled because the server stopped.
 */
-export const startIngestionWorker = () => {
+const handleFailed = async (
+  job: Job<IngestionJobData> | undefined,
+  err: Error
+): Promise<void> => {
+  if (!job) return;
+  const { documentId } = job.data;
+
+  logger.error("Ingestion attempt failed", {
+    documentId,
+    attempt: job.attemptsMade,
+    error: err.message,
+  });
+
+  try {
+    if (!(await job.isFailed())) return;
+
+    const status = await documentRepo.findStatus(documentId);
+    if (status === null || status === "READY") return;
+
+    const label = STAGE_LABELS[status] ?? "starting";
+    await documentRepo.updateStatus(
+      documentId,
+      "FAILED",
+      err instanceof PermanentIngestionError
+        ? err.message
+        : `Processing stopped while ${label}. Retry to continue from there.`
+    );
+  } catch (error) {
+    logger.error("Could not mark document as failed", {
+      documentId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+// How often the watchdog checks, and how long jobs may wait with nobody working
+const WATCHDOG_INTERVAL_MS = 30_000;
+const IDLE_WITH_WAITING_JOBS_MS = 60_000;
+
+const createWorker = (onStart: () => void, onEnd: () => void) => {
   const worker = new Worker<IngestionJobData>(
-    "document-ingestion",
-    processJob,
+    QUEUE_NAMES.DOCUMENT_INGESTION,
+    async (job) => {
+      onStart();
+      try {
+        await processJob(job);
+      } finally {
+        onEnd();
+      }
+    },
     {
       connection: getRedis(),
       concurrency: CONCURRENCY,
     }
   );
 
-  worker.on("completed", (job) => {
-    logger.info("Ingestion job completed", { jobId: job.id });
-  });
+  worker.on("failed", (job, err) => void handleFailed(job, err));
 
-  worker.on("failed", (job, err) => {
-    logger.error("Ingestion job failed permanently", {
-      jobId: job?.id,
+  worker.on("error", (err) => {
+    logger.error("Ingestion worker connection error", {
       error: err.message,
     });
   });
+
+  return worker;
+};
+
+/*
+  Creates and starts the BullMQ worker.
+  Called once at server startup.
+
+  A worker can stop receiving jobs without any error, for example when
+  the connection to a hosted Redis is dropped silently while it waits.
+  Jobs then sit as QUEUED forever. The watchdog notices waiting jobs
+  while nothing is being processed, and replaces the worker.
+*/
+export const startIngestionWorker = () => {
+  let running = 0;
+  let lastActivity = Date.now();
+
+  const touch = () => {
+    lastActivity = Date.now();
+  };
+  const onStart = () => {
+    running++;
+    touch();
+  };
+  const onEnd = () => {
+    running--;
+    touch();
+  };
+
+  let worker = createWorker(onStart, onEnd);
+
+  const watchdog = setInterval(async () => {
+    try {
+      const waiting = await getIngestionQueue().getWaitingCount();
+      const idleFor = Date.now() - lastActivity;
+
+      if (waiting === 0 || running > 0 || idleFor < IDLE_WITH_WAITING_JOBS_MS) {
+        return;
+      }
+
+      logger.warn("Jobs are waiting but the worker is idle, restarting it", {
+        waiting,
+        idleSeconds: Math.round(idleFor / 1000),
+      });
+
+      const stuckWorker = worker;
+      worker = createWorker(onStart, onEnd);
+      touch();
+      await stuckWorker.close(true).catch(() => undefined);
+    } catch (err) {
+      logger.warn("Worker watchdog check failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, WATCHDOG_INTERVAL_MS);
+  watchdog.unref();
 
   logger.info("Ingestion worker started", { concurrency: CONCURRENCY });
 

@@ -25,13 +25,17 @@ export const LIMITS = {
   //This controls your RAG pipeline. 
   RETRIEVAL_TOP_K: 20, //how many matching chunks w want back.
   CONTEXT_TOP_K: 10,
-  MIN_RELEVANCE_SCORE: 0.3, //helps determine:"Are these chunks actually relevant enough to answer this question?"
+  // Cosine similarity of the best vector match, 0 to 1. Not an RRF score, which never exceeds about 0.033.
+  // Measured 2026-11-25 on two documents: valid questions scored 0.14 to 0.47, unrelated ones 0.04 to 0.16.
+  // The ranges overlap, so this is only a first filter. The system prompt does the final refusing.
+  MIN_RELEVANCE_SCORE: 0.12,
 
   MAX_CONTEXT_TOKENS: 8000, //These prevent from dumping unlimited material into the LLM.
   MAX_RESPONSE_TOKENS: 2000,
   MAX_PAGES_PER_DOCUMENT: 800,
 
   UPLOAD_RATE_LIMIT_PER_HOUR: env.UPLOAD_RATE_LIMIT_PER_HOUR,
+  RETRY_RATE_LIMIT_PER_HOUR: 30, // separate from uploads, a retry stores no new file
   QUERY_RATE_LIMIT_PER_HOUR: env.QUERY_RATE_LIMIT_PER_HOUR,
   LOGIN_RATE_LIMIT_PER_15MIN: env.LOGIN_RATE_LIMIT_PER_15MIN,
 

@@ -72,7 +72,13 @@ export const queryController = {
         rather than a single JSON response.
       */
       res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
+      /*
+        no-transform stops the compression middleware from holding
+        tokens back until the answer is complete. X-Accel-Buffering
+        asks proxies in front of the server to do the same.
+      */
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
       res.setHeader("Connection", "keep-alive");
       res.setHeader("X-Conversation-Id", activeConversationId);
       res.flushHeaders();
@@ -92,13 +98,18 @@ export const queryController = {
           */
           res.write(`data: ${JSON.stringify({ type: "token", token })}\n\n`);
         },
-        onComplete: async (text: string, citations: Citation[]) => {
+        onComplete: async (
+          text: string,
+          citations: Citation[],
+          model: string
+        ) => {
           fullText = text;
 
+          // model records which model actually answered, primary or fallback
           const queryMetadata = {
             generation_ms: Date.now() - startMs,
             chunks_used: citations.length,
-            model: "llama-3.3-70b-versatile",
+            model,
           };
 
           await conversationRepo.addMessage(

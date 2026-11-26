@@ -16,6 +16,8 @@ export const uploadDocumentBodySchema = z.object({
     .max(200, "Title must be 200 characters or fewer")
     .trim()
     .optional(),
+  // Chosen by the client so a repeated upload can be recognised
+  documentId: z.string().uuid("Invalid document ID").optional(),
 });
 
 export type DocumentParams = z.infer<typeof documentParamsSchema>;

@@ -19,7 +19,12 @@ export const mapCitations = async (
     A response may cite the same document multiple times
     so we deduplicate by chunk_id.
   */
-  const docIndexPattern = /\[Doc (\d+)\]/g; //It searches for things like: [Doc 1], [Doc 2]
+  /*
+    Matches [Doc 1] and also 【Doc 1】 with full width brackets,
+    which gpt oss models emit in short answers. Keep in sync with
+    the client pattern in components/conversation/MessageContent.tsx.
+  */
+  const docIndexPattern = /[[【]Doc\s*(\d+)[\]】]/gi;
   const referencedIndexes = new Set<number>(); //stores unique values.
   let match: RegExpExecArray | null;
 
@@ -59,6 +64,7 @@ export const mapCitations = async (
   );
 
   const citations: Citation[] = referenced.map((ref) => ({
+    index: ref.index,
     document_id: ref.document_id,
     document_title: titleMap.get(ref.document_id) ?? "Unknown document",
     page_number: ref.page_number,

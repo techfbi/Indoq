@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useUploadDocument } from "@/hooks/useDocuments";
 import { useUIStore } from "@/store/ui.store";
 import Input from "@/components/ui/Input";
@@ -19,8 +19,12 @@ export const DocumentUploadModal = ({
 }: DocumentUploadModalProps) => {
   const open = useUIStore((s) => s.uploadModalOpen);
   const setOpen = useUIStore((s) => s.setUploadModalOpen);
+  const shouldReduceMotion = useReducedMotion();
 
   const [file, setFile] = useState<File | null>(null);
+  // Names this upload, kept across retries and replaced with the file
+  const [documentId, setDocumentId] = useState("");
+  const [uploadFailed, setUploadFailed] = useState(false);
   const [title, setTitle] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,24 +32,28 @@ export const DocumentUploadModal = ({
 
   const { mutate: uploadDoc, isPending } = useUploadDocument(workspaceId);
 
-  useEffect(() => {
-    if (open) {
-      setFile(null);
-      setTitle("");
-      setErrorMessage(null);
-      setDragActive(false);
-    }
-  }, [open]);
+  /*
+    Resets local form state and closes the modal without synchronous setState in useEffect
+  */
+  const handleClose = useCallback(() => {
+    if (isPending) return;
+    setFile(null);
+    setTitle("");
+    setErrorMessage(null);
+    setUploadFailed(false);
+    setDragActive(false);
+    setOpen(false);
+  }, [isPending, setOpen]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isPending) {
-        setOpen(false);
+      if (e.key === "Escape") {
+        handleClose();
       }
     };
     if (open) window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, setOpen, isPending]);
+  }, [open, handleClose]);
 
   const validateSelectedFile = (selectedFile: File): boolean => {
     const lowerName = selectedFile.name.toLowerCase();
@@ -64,6 +72,8 @@ export const DocumentUploadModal = ({
     }
 
     setErrorMessage(null);
+    setUploadFailed(false);
+    setDocumentId(crypto.randomUUID());
     return true;
   };
 
@@ -106,14 +116,22 @@ export const DocumentUploadModal = ({
       return;
     }
 
+    setErrorMessage(null);
+    setUploadFailed(false);
     uploadDoc(
-      { file, title },
+      { file, title, documentId },
       {
         onSuccess: () => {
+          setFile(null);
+          setTitle("");
+          setDocumentId("");
+          setErrorMessage(null);
+          setDragActive(false);
           setOpen(false);
         },
         onError: (err: Error) => {
           setErrorMessage(err.message || "Failed to upload document");
+          setUploadFailed(true);
         },
       }
     );
@@ -127,19 +145,22 @@ export const DocumentUploadModal = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-black/40 z-40 backdrop-blur-xs"
-            onClick={() => !isPending && setOpen(false)}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={handleClose}
             aria-hidden="true"
           />
 
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              initial={{ opacity: 0, scale: 0.97, y: shouldReduceMotion ? 0 : 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97, y: 8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="w-full max-w-md bg-surface border border-border rounded-lg shadow-sm p-6"
+              exit={{ opacity: 0, scale: 0.97, y: shouldReduceMotion ? 0 : 8 }}
+              transition={{
+                duration: shouldReduceMotion ? 0 : 0.18,
+                ease: "easeOut",
+              }}
+              className="w-full max-w-md bg-surface border border-border rounded-lg p-6"
               role="dialog"
               aria-modal="true"
               aria-labelledby="upload-modal-title"
@@ -158,7 +179,8 @@ export const DocumentUploadModal = ({
                 </div>
 
                 <button
-                  onClick={() => !isPending && setOpen(false)}
+                  type="button"
+                  onClick={handleClose}
                   className="w-6 h-6 flex items-center justify-center rounded-md text-text-disabled hover:text-text-primary hover:bg-surface-raised transition-colors"
                   aria-label="Close"
                 >
@@ -188,8 +210,8 @@ export const DocumentUploadModal = ({
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                     dragActive
-                      ? "border-accent bg-accent-muted/20"
-                      : "border-border hover:border-border-strong bg-surface-raised/40"
+                      ? "border-accent bg-accent-muted"
+                      : "border-border hover:border-border-strong bg-surface-raised"
                   }`}
                 >
                   <input
@@ -253,16 +275,44 @@ export const DocumentUploadModal = ({
                 )}
 
                 {errorMessage && (
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    {errorMessage}
-                  </p>
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 text-xs text-danger"
+                  >
+                    <p>{errorMessage}</p>
+                    {uploadFailed && (
+                      <button
+                        type="submit"
+                        disabled={isPending}
+                        title="Retry upload"
+                        aria-label="Retry upload"
+                        className="group/retry shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-accent hover:bg-accent-muted active:scale-90 transition-all"
+                      >
+                        <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={"transition-transform duration-300 group-hover/retry:rotate-90"}
+                >
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setOpen(false)}
+                    onClick={handleClose}
                     disabled={isPending}
                   >
                     Cancel
@@ -270,9 +320,13 @@ export const DocumentUploadModal = ({
                   <Button
                     type="submit"
                     disabled={!file || isPending}
-                    className="w-auto px-5"
+                    className="w-auto px-5 whitespace-nowrap"
                   >
-                    {isPending ? "Uploading..." : "Upload document"}
+                    {isPending
+                      ? "Uploading..."
+                      : uploadFailed
+                        ? "Try again"
+                        : "Upload document"}
                   </Button>
                 </div>
               </form>
@@ -283,4 +337,3 @@ export const DocumentUploadModal = ({
     </AnimatePresence>
   );
 };
-

@@ -4,6 +4,7 @@ import { vectorSearch } from "./vectorSearch.js";
 import { fullTextSearch } from "./fullTextSearch.js";
 import { reciprocalRankFusion } from "./hybridFusion.js";
 import { LIMITS } from "../../config/limits.js";
+import { documentRepo } from "../../repositories/document.repo.js";
 import { logger } from "../../utils/logger.js";
 import type { FusedChunk } from "./hybridFusion.js";
 
@@ -31,8 +32,10 @@ const embedQuery = async (query: string): Promise<number[]> => {
   Runs vector search and full text search in parallel then
   merges results using Reciprocal Rank Fusion.
   Returns the top CONTEXT_TOP_K chunks sorted by RRF score.
-  If the top result's RRF score is below MIN_RELEVANCE_SCORE
-  the retrieval is considered insufficient.
+  Retrieval is insufficient when nothing was found, or when there is
+  no keyword match and the best cosine similarity is below
+  MIN_RELEVANCE_SCORE. RRF scores only rank results, they say
+  nothing about how relevant a result is.
 */
 export const retrieve = async (
   query: string,
@@ -41,7 +44,7 @@ export const retrieve = async (
 ): Promise<{ chunks: FusedChunk[]; insufficient: boolean }> => {
   const startMs = Date.now();
 
-  const [queryEmbedding] = await Promise.all([embedQuery(query)]);
+  const queryEmbedding = await embedQuery(query);
 
   /*
     Run both retrieval methods in parallel.
@@ -49,13 +52,25 @@ export const retrieve = async (
     we fall back to vector results only rather than failing
     the entire retrieval.
   */
-  const [vectorResults, ftsResults] = await Promise.allSettled([ //Promise.allSettled() instead of Promise.all() bcos Promise.all() fails everything if one promise fails
-    vectorSearch(queryEmbedding, workspaceId, documentId),
-    fullTextSearch(query, workspaceId, documentId),
+  const [[vectorResults, ftsResults], readyIds] = await Promise.all([
+    Promise.allSettled([
+      vectorSearch(queryEmbedding, workspaceId, documentId),
+      fullTextSearch(query, workspaceId, documentId),
+    ]),
+    documentRepo.findReadyIds(workspaceId),
   ]);
 
-  const vector = vectorResults.status === "fulfilled" ? vectorResults.value : [];
-  const fts = ftsResults.status === "fulfilled" ? ftsResults.value : [];
+  /*
+    Chunks are saved before a document is finished, so leave out any
+    that belong to a document still processing or stopped part way.
+  */
+  const onlyReady = <T extends { document_id: string }>(chunks: T[]): T[] =>
+    chunks.filter((c) => readyIds.has(c.document_id));
+
+  const vector =
+    vectorResults.status === "fulfilled" ? onlyReady(vectorResults.value) : [];
+  const fts =
+    ftsResults.status === "fulfilled" ? onlyReady(ftsResults.value) : [];
 
   if (vectorResults.status === "rejected") {
     logger.error("Vector search failed", {
@@ -79,11 +94,14 @@ export const retrieve = async (
     vectorCount: vector.length,
     ftsCount: fts.length,
     fusedCount: fused.length,
+    topSimilarity: vector[0]?.score ?? 0,
     retrievalMs,
   });
 
-  const topScore = fused[0]?.rrfScore ?? 0;
-  const insufficient = fused.length === 0 || topScore < LIMITS.MIN_RELEVANCE_SCORE;
+  const topSimilarity = vector[0]?.score ?? 0;
+  const insufficient =
+    fused.length === 0 ||
+    (fts.length === 0 && topSimilarity < LIMITS.MIN_RELEVANCE_SCORE);
 
   return { chunks: fused, insufficient };
 };

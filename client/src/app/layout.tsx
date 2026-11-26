@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Hanken_Grotesk, Inter } from "next/font/google";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Providers from "@/components/Providers";
 import { brand } from "@/config/brand";
 import "./globals.css";
@@ -62,11 +62,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const RootLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <html
       lang="en"
@@ -77,9 +73,10 @@ export default function RootLayout({
         className="bg-background text-text-primary font-sans antialiased"
         suppressHydrationWarning
       >
-        {" "}
         <Providers>{children}</Providers>
       </body>
     </html>
   );
-}
+};
+
+export default RootLayout;

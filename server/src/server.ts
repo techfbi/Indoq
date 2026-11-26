@@ -17,13 +17,33 @@ const app = express();
 // Security headers
 app.use(helmet());
 
-// CORS, only allow the configured client origin
+/*
+  CORS policy allows the configured CLIENT_URL in all environments,
+  and additionally allows any localhost port during local development
+  when Next.js selects a fallback port such as 3001 or 3002.
+*/
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin || origin === env.CLIENT_URL) {
+        callback(null, true);
+        return;
+      }
+
+      if (
+        env.NODE_ENV === "development" &&
+        /^http:\/\/localhost:\d+$/.test(origin)
+      ) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["X-Conversation-Id"],
   })
 );
 
@@ -32,7 +52,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Compression
-app.use(compression()); //reduces response size. Good for things like workspace/document lists and API responses.
+app.use(compression()); // reduces response size for workspace and document lists
 
 // HTTP logging (skip in test)
 if (env.NODE_ENV !== "test") {

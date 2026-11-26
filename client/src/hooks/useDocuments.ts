@@ -24,11 +24,15 @@ export const useUploadDocument = (workspaceId: string) => {
     mutationFn: async ({
       file,
       title,
+      documentId,
     }: {
       file: File;
       title?: string;
+      documentId: string;
     }): Promise<{ document: Document }> => {
       const formData = new FormData();
+      // Same id on every attempt, so a repeat is never stored twice
+      formData.append("documentId", documentId);
       formData.append("file", file);
       if (title?.trim()) {
         formData.append("title", title.trim());
@@ -42,6 +46,30 @@ export const useUploadDocument = (workspaceId: string) => {
     },
     onError: (error: Error) => {
       console.error("Document upload failed:", error.message);
+    },
+  });
+};
+
+/*
+  Continues a document that stopped part way. The reply replaces the
+  row straight away, then live updates take over.
+*/
+export const useRetryDocument = (workspaceId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (documentId: string): Promise<Document> => {
+      const { document } = await api.documents.retry(workspaceId, documentId);
+      return document;
+    },
+    onSuccess: (document) => {
+      queryClient.setQueryData<Document[]>(
+        getDocumentsQueryKey(workspaceId),
+        (old) => old?.map((d) => (d.id === document.id ? document : d))
+      );
+    },
+    onError: (error: Error) => {
+      console.error("Document retry failed:", error.message);
     },
   });
 };

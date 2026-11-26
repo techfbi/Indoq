@@ -105,28 +105,28 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="flex-1 flex flex-col items-center justify-center px-6 py-6 sm:py-16 text-center max-w-3xl lg:max-w-5xl mx-auto w-full">
-        <h1 className="font-display font-extrabold text-5xl sm:text-5xl md:text-6xl lg:text-8xl text-text-primary leading-none tracking-tight mb-4 sm:mb-6 z-10">
+        <h1 className="font-display font-extrabold text-5xl sm:text-5xl md:text-6xl lg:text-8xl text-text-primary leading-none tracking-tight mb-4 sm:mb-6 z-10 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
           Your documents,
           <br />
           <span className="text-accent">finally answerable.</span>
         </h1>
 
-        <p className="z-10 text-base sm:text-lg text-text-secondary leading-relaxed max-w-xl lg:max-w-2xl mb-6 sm:mb-10">
+        <p className="z-10 text-base sm:text-lg text-text-secondary leading-relaxed max-w-xl lg:max-w-2xl mb-6 sm:mb-10 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-150">
           Upload your documents, build a private knowledge base, and get
           grounded answers from your own sources. Nothing fabricated. Nothing
           leaked.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 mb-6 sm:mb-10 z-10 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-3 mb-6 sm:mb-10 z-10 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-300">
           <Link
             href="/signup"
-            className="w-full sm:w-auto text-sm bg-accent text-white px-6 py-2.5 sm:py-3 rounded-md hover:bg-accent-hover transition-colors font-medium"
+            className="w-full sm:w-auto text-sm bg-accent text-white px-6 py-2.5 sm:py-3 rounded-md hover:bg-accent-hover hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 font-medium"
           >
             Start for free
           </Link>
           <Link
             href="/login"
-            className="w-full sm:w-auto text-sm text-text-secondary hover:text-text-primary px-6 py-2.5 sm:py-3 rounded-md border border-border hover:border-border-strong transition-colors"
+            className="w-full sm:w-auto text-sm text-text-secondary hover:text-text-primary px-6 py-2.5 sm:py-3 rounded-md border border-border hover:border-border-strong hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150"
           >
             Sign in to your workspace
           </Link>

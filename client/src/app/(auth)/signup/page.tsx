@@ -19,7 +19,7 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 const getFriendlyError = (message: string): string =>
   FRIENDLY_ERRORS[message] ?? message;
 
-export default function SignupPage() {
+const SignupPage = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -233,4 +233,6 @@ export default function SignupPage() {
       </p>
     </div>
   );
-}
+};
+
+export default SignupPage;
