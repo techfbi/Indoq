@@ -12,6 +12,7 @@ import { chunkRepo } from "../repositories/chunk.repo.js";
 import { documentRepo } from "../repositories/document.repo.js";
 import { chunkDocument } from "../services/ingestion/chunker.js";
 import { embedBatch } from "../services/ingestion/embedder.js";
+import { stripUnstorableChars } from "../services/ingestion/sanitizeText.js";
 import {
   DocumentDeletedError,
   PermanentIngestionError,
@@ -91,17 +92,6 @@ const downloadFile = async (storagePath: string): Promise<Buffer> => {
 
   return Buffer.from(await response.arrayBuffer());
 };
-
-/*
-  PDFs sometimes contain null characters or broken Unicode pairs.
-  Postgres cannot store either and rejects the whole save with
-  "unsupported Unicode escape sequence", so remove them up front.
-*/
-const UNSTORABLE_CHARS =
-  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-
-const stripUnstorableChars = (text: string): string =>
-  text.replace(UNSTORABLE_CHARS, "");
 
 const assertPageLimit = (pageCount: number): void => {
   if (pageCount > LIMITS.MAX_PAGES_PER_DOCUMENT) {
