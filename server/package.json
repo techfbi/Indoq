@@ -1,7 +1,7 @@
 {
-  "name": "within-server",
+  "name": "indoq-server",
   "version": "1.0.0",
-  "description": "Within API",
+  "description": "Indoq API",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",

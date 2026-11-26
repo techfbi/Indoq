@@ -6,7 +6,7 @@ import RevealText from "./RevealText";
 /*
   The capabilities grid. Like the reference it mixes one solid accent
   card, a tilted product view, a conversation, and a card with a call
-  to action. All content describes what Within really does.
+  to action. All content describes what Indoq really does.
 */
 
 const Sparkles = () => (

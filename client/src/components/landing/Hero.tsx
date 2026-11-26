@@ -40,7 +40,7 @@ const Hero = () => {
 
       <FadeUp onLoad delay={0.75}>
         <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 sm:text-lg">
-          Upload PDFs, Word files and notes. Within reads them, indexes them, and answers your
+          Upload PDFs, Word files and notes. Indoq reads them, indexes them, and answers your
           questions with a citation to the exact passage.
         </p>
       </FadeUp>

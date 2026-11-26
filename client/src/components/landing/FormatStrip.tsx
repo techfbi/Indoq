@@ -2,7 +2,7 @@ import { FileCode2, FileText, FileType2, NotebookText } from "lucide-react";
 import FadeUp from "./FadeUp";
 
 /*
-  Where the reference shows customer logos. Within has none to show
+  Where the reference shows customer logos. Indoq has none to show
   yet, so the strip lists the file types it reads instead.
 */
 const FORMATS = [

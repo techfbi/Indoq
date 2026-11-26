@@ -55,7 +55,7 @@ export const useUIStore = create<UIStore>()(
       },
     }),
     {
-      name: "within-ui",
+      name: "indoq-ui",
       partialize: (state) => ({ theme: state.theme }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) applyTheme(state.theme);

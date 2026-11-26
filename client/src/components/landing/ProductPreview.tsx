@@ -1,7 +1,7 @@
 import { FileText, MessageSquare, Search } from "lucide-react";
 
 /*
-  A drawn copy of the Within workspace, not a screenshot, so it stays
+  A drawn copy of the Indoq workspace, not a screenshot, so it stays
   sharp at every size and follows the brand colours. The documents and
   the answer are illustrative examples.
 */
@@ -28,7 +28,7 @@ const ProductPreview = () => (
   <div className="landing-panel overflow-hidden rounded-2xl text-left">
     {/* Window bar */}
     <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5">
-      <span className="font-display text-sm font-bold text-white">Within</span>
+      <span className="font-display text-sm font-bold text-white">Indoq</span>
       <div className="hidden items-center gap-1 rounded-full bg-white/5 p-1 text-[11px] sm:flex">
         <span className="rounded-full bg-white/10 px-3 py-1 text-white">Chat</span>
         <span className="px-3 py-1 text-white/50">Documents</span>

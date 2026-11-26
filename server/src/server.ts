@@ -85,7 +85,7 @@ const start = async () => {
   startIngestionWorker(); // start the ingestion worker to process document ingestion jobs
 
   app.listen(env.PORT, () => {
-    console.log(`Within API running on port ${env.PORT} [${env.NODE_ENV}]`);
+    console.log(`Indoq API running on port ${env.PORT} [${env.NODE_ENV}]`);
   });
 };
 

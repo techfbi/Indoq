@@ -26,7 +26,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     }),
     {
-      name: "within-workspace",
+      name: "indoq-workspace",
       partialize: (state) => ({
         activeWorkspaceId: state.activeWorkspaceId,
       }),
