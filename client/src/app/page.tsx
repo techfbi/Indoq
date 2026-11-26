@@ -14,9 +14,28 @@ export const metadata: Metadata = {
   },
 };
 
+/*
+  Structured data so search engines understand what the product is.
+  Built from the brand config, so a rename needs no change here.
+  "<" is escaped so the JSON can never close the script tag early.
+*/
+const structuredData = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: brand.name,
+  description: brand.description,
+  url: brand.url,
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+}).replace(/\u003c/g, "\u003c");
+
 export default function LandingPage() {
   return (
     <main className="relative min-h-screen bg-background flex flex-col overflow-hidden">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: structuredData }}
+      />
       <InteractiveGridPattern
         className={cn(
           "mask-[radial-gradient(700px_circle_at_center,white,transparent)]",
