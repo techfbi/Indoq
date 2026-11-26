@@ -174,7 +174,7 @@ export const ConversationFeed = ({
             >
               <div className="flex items-center gap-2 mb-1 px-1">
                 <span className="text-xs font-medium text-text-secondary">
-                  Within
+                  Indoq
                 </span>
               </div>
 

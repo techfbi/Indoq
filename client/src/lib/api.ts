@@ -1,5 +1,5 @@
 /*
-  Typed API client for the Within Node backend.
+  Typed API client for the Indoq Node backend.
   All requests to the backend go through these functions. we never call the backend directly from components.
 */
 

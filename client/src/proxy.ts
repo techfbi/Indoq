@@ -2,12 +2,12 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /*
-  Middleware runs on every request before page rendering.
+  The proxy (formerly middleware) runs on every request before page rendering.
   It refreshes the Supabase session cookie so it stays valid
   while the user interacts with the application.
   It also guards private app routes from unauthenticated access.
 */
-export const middleware = async (request: NextRequest) => {
+export const proxy = async (request: NextRequest) => {
   let supabaseResponse = NextResponse.next({
     request,
   });

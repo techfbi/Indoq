@@ -6,4 +6,4 @@ Allow: /signup
 Disallow: /dashboard
 Disallow: /workspace
 
-Sitemap: https://within.app/sitemap.xml
+Sitemap: https://indoq.app/sitemap.xml
