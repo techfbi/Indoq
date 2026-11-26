@@ -1,0 +1,199 @@
+/*
+  Landing page only. The landing is always dark, with glow and glass
+  inspired by the reference video. The app keeps its own flat theme,
+  so none of this is used outside components/landing.
+*/
+.landing {
+  --landing-bg: #05040a;
+  --landing-violet: #8b5cf6;
+  --landing-violet-soft: #c4b5fd;
+  --landing-brand: #6f2da8;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(111, 45, 168, 0.35), transparent 70%),
+    var(--landing-bg);
+  color: #fff;
+  color-scheme: dark;
+}
+
+/* Primary button, a glowing violet pill with a soft inner highlight */
+.landing-button {
+  position: relative;
+  background: linear-gradient(180deg, #8b5cf6 0%, #6f2da8 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(196, 181, 253, 0.35),
+    0 8px 28px rgba(139, 92, 246, 0.45);
+  transition: transform 150ms ease, box-shadow 200ms ease;
+}
+
+.landing-button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 0 1px rgba(196, 181, 253, 0.55),
+    0 12px 36px rgba(139, 92, 246, 0.6);
+}
+
+.landing-button:active {
+  transform: scale(0.97);
+}
+
+.landing-button:focus-visible {
+  outline: 2px solid var(--landing-violet-soft);
+  outline-offset: 3px;
+}
+
+.landing-button-large {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 0 6px rgba(139, 92, 246, 0.18),
+    0 0 0 1px rgba(196, 181, 253, 0.5),
+    0 16px 50px rgba(139, 92, 246, 0.6);
+}
+
+.landing-gradient-text {
+  background: linear-gradient(90deg, #a78bfa, #c4b5fd 50%, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Dark glass surface used for product views */
+.landing-panel {
+  background: linear-gradient(180deg, rgba(28, 24, 44, 0.96), rgba(14, 12, 24, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.12),
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 -20px 80px rgba(139, 92, 246, 0.12);
+}
+
+/* Cards on the page, a faint violet tint over black */
+.landing-card {
+  background: linear-gradient(160deg, rgba(40, 32, 72, 0.55), rgba(12, 10, 22, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.landing-accent-card {
+  background: linear-gradient(160deg, #8b5cf6 0%, #6f2da8 60%, #4c1d95 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 60px rgba(111, 45, 168, 0.35);
+}
+
+.landing-icon {
+  background: linear-gradient(145deg, #a78bfa, #6f2da8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 8px 24px rgba(139, 92, 246, 0.45);
+}
+
+/* The glowing chip the pipeline feeds into */
+.landing-chip {
+  background: linear-gradient(145deg, #a78bfa 0%, #7c3aed 45%, #5b21b6 100%);
+  border: 6px solid rgba(196, 181, 253, 0.25);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.45),
+    0 0 40px rgba(139, 92, 246, 0.7),
+    0 0 120px rgba(139, 92, 246, 0.35);
+  animation: landing-chip-glow 3.6s ease-in-out infinite;
+}
+
+@keyframes landing-chip-glow {
+  50% {
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.45),
+      0 0 60px rgba(167, 139, 250, 0.9),
+      0 0 160px rgba(139, 92, 246, 0.45);
+  }
+}
+
+/* A short bright dash travelling along each feed line */
+.landing-trace-pulse {
+  stroke-dasharray: 40 400;
+  animation: landing-trace 2.8s linear infinite;
+  filter: drop-shadow(0 0 4px #a78bfa);
+}
+
+@keyframes landing-trace {
+  from {
+    stroke-dashoffset: 440;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.landing-twinkle {
+  animation: landing-twinkle 2.4s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+}
+
+@keyframes landing-twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Diagonal beams of light behind the hero */
+.landing-beam {
+  position: absolute;
+  top: -20%;
+  left: -12%;
+  width: 46%;
+  height: 120%;
+  background: linear-gradient(
+    180deg,
+    rgba(196, 181, 253, 0) 0%,
+    rgba(167, 139, 250, 0.22) 45%,
+    rgba(196, 181, 253, 0.05) 100%
+  );
+  filter: blur(40px);
+  transform: rotate(-32deg);
+  transform-origin: top left;
+}
+
+.landing-streak {
+  position: absolute;
+  top: -10%;
+  left: 4%;
+  width: 2px;
+  height: 95%;
+  background: linear-gradient(180deg, transparent, rgba(237, 233, 254, 0.9) 70%, transparent);
+  filter: blur(1px);
+  transform: rotate(-32deg);
+  transform-origin: top left;
+  box-shadow: 0 0 24px 6px rgba(167, 139, 250, 0.35);
+  animation: landing-streak 6s ease-in-out infinite;
+}
+
+@keyframes landing-streak {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Spotlight falling from the closing button */
+.landing-cta-beam {
+  background: radial-gradient(
+    ellipse 50% 100% at 50% 0%,
+    rgba(196, 181, 253, 0.55),
+    rgba(139, 92, 246, 0.25) 40%,
+    transparent 75%
+  );
+  filter: blur(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-chip,
+  .landing-trace-pulse,
+  .landing-twinkle,
+  .landing-streak {
+    animation: none;
+  }
+
+  .landing-trace-pulse {
+    stroke-dasharray: none;
+    opacity: 0.4;
+  }
+}
