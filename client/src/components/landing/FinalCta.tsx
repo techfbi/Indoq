@@ -37,7 +37,7 @@ const FinalCta = () => (
     <FadeUp delay={0.35} className="relative z-10 mt-10">
       <Link
         href="/signup"
-        className="landing-button landing-button-large inline-flex rounded-full px-10 py-4 text-lg font-medium text-white"
+        className="landing-button inline-flex rounded-full px-10 py-4 text-lg font-medium text-white"
       >
         Start for free
       </Link>
